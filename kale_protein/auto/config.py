@@ -4,85 +4,6 @@ from typing import Any, Dict
 import copy
 import json
 
-
-def _parse_scalar(value):
-    value = value.strip()
-    if value in {"{}", ""}:
-        return {} if value == "{}" else ""
-    if value == "[]":
-        return []
-    if value.startswith("[") and value.endswith("]"):
-        inner = value[1:-1].strip()
-        if not inner:
-            return []
-        return [_parse_scalar(part.strip()) for part in inner.split(",")]
-    if value.startswith("{") and value.endswith("}"):
-        inner = value[1:-1].strip()
-        if not inner:
-            return {}
-        out = {}
-        for part in inner.split(","):
-            key, item = part.split(":", 1)
-            out[key.strip().strip('"')] = _parse_scalar(item)
-        return out
-    if (value.startswith("\"") and value.endswith("\"")) or (value.startswith("'") and value.endswith("'")):
-        return value[1:-1]
-    if value in {"true", "True"}:
-        return True
-    if value in {"false", "False"}:
-        return False
-    if value in {"null", "None"}:
-        return None
-    try:
-        return int(value)
-    except ValueError:
-        try:
-            return float(value)
-        except ValueError:
-            return value
-
-
-def _simple_yaml_load(text):
-    """Parse the small YAML subset used by KaleProtein configs.
-
-    This fallback keeps examples runnable when PyYAML is not installed. It
-    supports nested mappings, scalar values, inline lists/dicts, and block
-    lists of scalars. For full YAML support, install PyYAML.
-    """
-    root = {}
-    stack = [(-1, root)]
-    lines = [line.rstrip() for line in text.splitlines() if line.strip() and not line.lstrip().startswith("#")]
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        indent = len(line) - len(line.lstrip(" "))
-        stripped = line.strip()
-        while stack and indent <= stack[-1][0]:
-            stack.pop()
-        parent = stack[-1][1]
-        if stripped.startswith("- "):
-            parent.append(_parse_scalar(stripped[2:]))
-            i += 1
-            continue
-        key, sep, value = stripped.partition(":")
-        if not sep:
-            raise ValueError(f"Cannot parse config line: {line}")
-        key = key.strip()
-        value = value.strip()
-        if value:
-            parent[key] = _parse_scalar(value)
-            i += 1
-            continue
-        next_container = {}
-        if i + 1 < len(lines):
-            next_stripped = lines[i + 1].strip()
-            if next_stripped.startswith("- "):
-                next_container = []
-        parent[key] = next_container
-        stack.append((indent, next_container))
-        i += 1
-    return root
-
 @dataclass
 class StreamSpec:
     name: str
@@ -128,15 +49,9 @@ class AutoProteinConfig:
     def from_yaml(cls, path):
         text = Path(path).read_text(encoding='utf-8')
         try:
-            import yaml
-        except ImportError:
-            try:
-                data = json.loads(text)
-            except json.JSONDecodeError:
-                data = _simple_yaml_load(text)
-        else:
-            data = yaml.safe_load(text)
-        return cls(data)
+            return cls(json.loads(text))
+        except json.JSONDecodeError as exc:
+            raise ValueError('YAML parsing requires PyYAML in this minimal environment; use from_preset or JSON-formatted config.') from exc
 
     @classmethod
     def from_dict(cls, config_dict): return cls(config_dict)
