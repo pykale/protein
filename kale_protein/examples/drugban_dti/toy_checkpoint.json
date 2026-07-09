@@ -1,0 +1,7 @@
+{
+  "metadata": {
+    "name": "toy-drugban-checkpoint",
+    "description": "Demonstrates the pretrained checkpoint loading hook."
+  },
+  "state_dict": {}
+}

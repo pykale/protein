@@ -1,0 +1,33 @@
+name: drugban
+task: drug_target_interaction
+objective: discriminative
+runner: predict
+streams:
+  drug:
+    modality: small_molecule
+    input_key: smiles
+    processor: rdkit_graph
+    encoder: drugban_molecule_gnn
+    processor_kwargs: {}
+    encoder_kwargs: {hidden_dim: 128, output_dim: 128}
+  target:
+    modality: protein_sequence
+    input_key: sequence
+    processor: amino_acid_tokenizer
+    encoder: drugban_protein_cnn
+    processor_kwargs: {max_length: 1000}
+    encoder_kwargs: {hidden_dim: 128, output_dim: 128}
+fusion:
+  type: bilinear_attention
+  kwargs: {hidden_dim: 256}
+head:
+  type: binary_classifier
+  kwargs: {input_dim: 256, hidden_dim: 128, output_dim: 1}
+loss: {type: binary_cross_entropy}
+checkpoint:
+  path: null
+  strict: false
+evaluation:
+  metrics: [auroc, auprc, accuracy, f1]
+interpretation:
+  method: bilinear_attention_map
