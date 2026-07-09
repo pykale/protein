@@ -54,10 +54,6 @@ The most common workflow is:
 3. Select registered processors, encoders, fusion/conditioner modules, heads, runners, evaluators, and interpreters.
 4. Load the config with `AutoProteinConfig.from_yaml("path/to/config.yaml")`.
 
-## Pretrained checkpoints
-
-`AutoProteinPredictor.from_config(config, pretrained=True)` loads the checkpoint configured at `checkpoint.path`. You can also pass `checkpoint_path=...` to override the config path. See [CUSTOMIZE.md](CUSTOMIZE.md#9-load-pretrained-checkpoints) for details.
-
 ## Continuous integration
 
 The GitHub Actions workflow at `.github/workflows/tests.yml` runs tests on Python 3.10, 3.11, and 3.12, byte-compiles the package, and executes the toy examples.

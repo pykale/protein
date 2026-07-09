@@ -24,9 +24,6 @@ head:
   type: binary_classifier
   kwargs: {input_dim: 256, hidden_dim: 128, output_dim: 1}
 loss: {type: binary_cross_entropy}
-checkpoint:
-  path: null
-  strict: false
 evaluation:
   metrics: [auroc, auprc, accuracy, f1]
 interpretation:

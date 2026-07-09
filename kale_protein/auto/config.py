@@ -24,7 +24,6 @@ _DRUGBAN = {
     'fusion':{'type':'bilinear_attention','kwargs':{'hidden_dim':256}},
     'head':{'type':'binary_classifier','kwargs':{'input_dim':256,'hidden_dim':128,'output_dim':1}},
     'loss':{'type':'binary_cross_entropy'},
-    'checkpoint':{'path':None, 'strict':False},
     'evaluation':{'metrics':['auroc','auprc','accuracy','f1']},
     'interpretation':{'method':'bilinear_attention_map'},
 }
@@ -37,7 +36,6 @@ _MAPDIFF = {
     'conditioner':{'type':'structure_conditioned_denoising','kwargs':{'hidden_dim':128}},
     'head':{'type':'diffusion_sequence_decoder','kwargs':{'hidden_dim':128,'vocab_size':25}},
     'sampling':{'steps':100,'num_samples':8,'temperature':1.0},
-    'checkpoint':{'path':None, 'strict':False},
     'evaluation':{'metrics':['sequence_recovery','diversity','novelty']},
     'interpretation':{'method':'denoising_trajectory'},
 }

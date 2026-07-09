@@ -310,32 +310,3 @@ python -m compileall -q kale_protein
 python kale_protein/examples/drugban_dti/evaluate.py
 python kale_protein/examples/mapdiff_inverse_folding/generate.py
 ```
-
-## 9. Load pretrained checkpoints
-
-`AutoProteinPredictor.from_config()` accepts `pretrained=True` and an optional `checkpoint_path`. If `checkpoint_path` is omitted, KaleProtein reads `checkpoint.path` from the config.
-
-```yaml
-checkpoint:
-  path: /path/to/model_checkpoint.json
-  strict: false
-```
-
-```python
-from kale_protein.auto import AutoProteinConfig, AutoProteinPredictor
-
-config = AutoProteinConfig.from_yaml("my_drugban.yaml")
-predictor = AutoProteinPredictor.from_config(config, pretrained=True)
-```
-
-You can also override the path at call time:
-
-```python
-predictor = AutoProteinPredictor.from_config(
-    config,
-    pretrained=True,
-    checkpoint_path="/path/to/model_checkpoint.json",
-)
-```
-
-The v0.1 checkpoint hook loads JSON checkpoints. A checkpoint may contain a `state_dict` object and optional metadata. The lightweight toy components do not have real learned weights, but this hook is the stable place for future torch-backed models to load pretrained parameters.

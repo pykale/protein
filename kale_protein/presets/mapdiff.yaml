@@ -27,9 +27,6 @@ sampling:
   steps: 100
   num_samples: 8
   temperature: 1.0
-checkpoint:
-  path: null
-  strict: false
 evaluation:
   metrics: [sequence_recovery, diversity, novelty]
 interpretation:
