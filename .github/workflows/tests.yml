@@ -24,15 +24,12 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install test dependencies
-        run: python -m pip install --upgrade pip
-
-      - name: Run unit tests with unittest
-        run: python -m unittest discover -s kale_protein/tests
-
-      - name: Run unit tests with pytest
         run: |
+          python -m pip install --upgrade pip
           python -m pip install pytest
-          pytest -q kale_protein/tests
+
+      - name: Run unit tests
+        run: pytest -q kale_protein/tests
 
       - name: Byte-compile package
         run: python -m compileall -q kale_protein

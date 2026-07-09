@@ -1,30 +1,16 @@
-import unittest
-
+import pytest
 from kale_protein.registry.base import Registry
 
+def test_registry_register_get_available_and_missing():
+    r=Registry('thing')
+    class A: pass
+    r.register('a', A)
+    assert r.get('a') is A
+    assert r.available_keys()==['a']
+    with pytest.raises(KeyError): r.get('missing')
 
-class RegistryTest(unittest.TestCase):
-    def test_registry_register_get_available_and_missing(self):
-        registry = Registry('thing')
-
-        class A:
-            pass
-
-        registry.register('a', A)
-        self.assertIs(registry.get('a'), A)
-        self.assertEqual(registry.available_keys(), ['a'])
-        with self.assertRaises(KeyError):
-            registry.get('missing')
-
-    def test_registry_decorator(self):
-        registry = Registry('thing')
-
-        @registry.register(('x', 'y'))
-        class B:
-            pass
-
-        self.assertIs(registry.get(('x', 'y')), B)
-
-
-if __name__ == '__main__':
-    unittest.main()
+def test_registry_decorator():
+    r=Registry('thing')
+    @r.register(('x','y'))
+    class B: pass
+    assert r.get(('x','y')) is B

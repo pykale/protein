@@ -1,22 +1,8 @@
 import kale_protein  # noqa
 from kale_protein.registry import MODALITY_ENCODER_REGISTRY,FUSION_REGISTRY,CONDITIONER_REGISTRY,HEAD_REGISTRY,RUNNER_REGISTRY
-
-try:
-    from torch import nn
-except ImportError:
-    class _BaseModule:
-        def __call__(self, *args, **kwargs):
-            return self.forward(*args, **kwargs)
-    class _ModuleDict(dict):
-        pass
-else:
-    _BaseModule = nn.Module
-    _ModuleDict = dict
-
-
-class MultiStreamProteinModel(_BaseModule):
+class MultiStreamProteinModel:
     def __init__(self, config):
-        super().__init__(); self.config=config; self.encoders=_ModuleDict()
+        self.config=config; self.encoders={}
         for name, stream in config.get_streams().items():
             self.encoders[name]=MODALITY_ENCODER_REGISTRY.get((stream.modality, stream.encoder))(**stream.encoder_kwargs)
         self.fusion=None
@@ -27,7 +13,7 @@ class MultiStreamProteinModel(_BaseModule):
             c=config['conditioner']; self.conditioner=CONDITIONER_REGISTRY.get(c['type'])(**c.get('kwargs',{}))
         self.head=HEAD_REGISTRY.get((config['task'], config['head']['type']))(**config['head'].get('kwargs',{}))
     def encode_streams(self,batch): return {n:e(batch[n]) for n,e in self.encoders.items()}
-    def forward(self,batch):
+    def __call__(self,batch):
         so=self.encode_streams(batch)
         if self.fusion is not None: return self.head(self.fusion(so))
         if self.conditioner is not None: return self.head(self.conditioner(so, timestep=batch.get('timestep')))
