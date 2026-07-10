@@ -150,6 +150,35 @@ modalities and tasks. Specific model definitions should be added through a
 model-card folder and `auto_map`, not by adding model-name branches to
 `kale_protein.auto`.
 
+## DTI Datasets
+
+The DTI data layer includes reusable loaders for the DrugBAN-style BindingDB,
+Human, and BioSNAP datasets. These loaders are registered at the task level, so
+any DTI model can use them through `AutoProteinData`:
+
+```python
+from kale_protein.auto import AutoProteinData
+
+bindingdb = AutoProteinData("DTI/BindingDB", root="path/to/DrugBAN/datasets")
+human_train = AutoProteinData(
+    "DTI/Human",
+    root="path/to/DrugBAN/datasets",
+    split="random",
+    subset="train",
+)
+biosnap_test = AutoProteinData(
+    "DTI/BioSNAP",
+    root="path/to/DrugBAN/datasets",
+    split="cluster",
+    subset="test",
+)
+```
+
+`root` may point either to the upstream `datasets/` directory or directly to one
+dataset directory. Full datasets load from `full.csv`; split datasets load from
+`<split>/<subset>.csv`. Rows are normalized to dictionaries with `smiles`,
+`sequence`, and `label` keys while preserving source metadata.
+
 ## Customization
 
 To add a new model:
