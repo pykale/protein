@@ -1,0 +1,14 @@
+model_id: InverseFolding/MapDiff
+data_id: InverseFolding/CATH
+seed: 1024
+device: auto
+data:
+  train_dir: data/processed/train
+  val_dir: data/processed/validation
+  test_dir: data/processed/test
+train:
+  batch_size: 1
+  epochs: 1
+  lr: 0.0001
+output:
+  dir: outputs/mapdiff

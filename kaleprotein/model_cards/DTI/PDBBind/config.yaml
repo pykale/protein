@@ -1,0 +1,5 @@
+model_id: DTI/PDBBind
+model_type: drugban
+task: drug_target_interaction
+training:
+  batch_size: 4

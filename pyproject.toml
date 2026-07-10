@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kaleprotein-examples"
+version = "0.1.0"
+description = "Real DrugBAN and MapDiff example workflows with testable pipeline seams."
+requires-python = ">=3.10"
+
+[tool.setuptools.packages.find]
+include = ["kaleprotein*", "examples*"]
+
+[tool.setuptools.package-data]
+kaleprotein = ["model_cards/**/*.yaml", "model_cards/**/*.json", "model_cards/**/.gitkeep"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

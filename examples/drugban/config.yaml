@@ -1,0 +1,15 @@
+model_id: DTI/DrugBAN
+data_id: DTI/PDBBind
+seed: 42
+device: auto
+data:
+  train_csv: data/train.csv
+  val_csv: data/val.csv
+  test_csv: data/test.csv
+  predict_csv: data/test.csv
+solver:
+  batch_size: 4
+  max_epoch: 2
+  lr: 0.0001
+output:
+  dir: outputs/drugban

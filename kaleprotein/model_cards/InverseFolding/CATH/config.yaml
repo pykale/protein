@@ -1,0 +1,5 @@
+model_id: InverseFolding/CATH
+model_type: mapdiff
+task: inverse_protein_folding
+training:
+  batch_size: 1

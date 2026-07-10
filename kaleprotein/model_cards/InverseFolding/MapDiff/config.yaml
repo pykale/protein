@@ -1,0 +1,18 @@
+model_id: InverseFolding/MapDiff
+model_type: mapdiff
+architecture: MapDiffForInverseFolding
+task: inverse_protein_folding
+model:
+  input_dim: 23
+  hidden_dim: 128
+  depth: 4
+  num_residue_types: 20
+training:
+  batch_size: 1
+  lr: 0.0001
+  max_epochs: 1
+weights:
+  filename: mapdiff_weight.pt
+  local_path: weights/mapdiff_weight.pt
+  url: https://github.com/peizhenbai/MapDiff/releases/download/v1.0.1/mapdiff_weight.pt
+  sha256: ""

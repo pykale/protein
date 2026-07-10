@@ -1,0 +1,31 @@
+model_id: DTI/DrugBAN
+model_type: drugban
+architecture: DrugBANForDTI
+task: drug_target_interaction
+preprocessing:
+  max_drug_nodes: 290
+  max_protein_length: 1200
+maps:
+  smiles_vocab: maps/smiles_vocab.json
+  protein_vocab: maps/protein_vocab.json
+model:
+  drug_vocab_size: 31
+  protein_vocab_size: 26
+  drug_embedding_dim: 64
+  drug_hidden_dims: [96, 128]
+  protein_embedding_dim: 64
+  protein_filters: [96, 128, 128]
+  protein_kernels: [3, 5, 7]
+  ban_hidden_dim: 128
+  ban_heads: 2
+  classifier_hidden_dim: 128
+  dropout: 0.1
+training:
+  batch_size: 4
+  lr: 0.0001
+  max_epochs: 2
+weights:
+  filename: pytorch_model.bin
+  local_path: weights/pytorch_model.bin
+  url: ""
+  sha256: ""

@@ -1,0 +1,2 @@
+"""DrugBAN example pipeline."""
+

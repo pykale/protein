@@ -1,0 +1,2 @@
+"""MapDiff example pipeline."""
+
