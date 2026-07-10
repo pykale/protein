@@ -8,3 +8,5 @@ from .runners import RUNNERS_REGISTRY as RUNNER_REGISTRY
 from .evaluators import EVALUATORS_REGISTRY as EVALUATOR_REGISTRY
 from .interpreters import INTERPRETERS_REGISTRY as INTERPRETER_REGISTRY
 from .presets import PRESETS_REGISTRY as PRESET_REGISTRY
+from .model_cards import MODEL_CARD_REGISTRY
+from .datasets import DATASET_REGISTRY
