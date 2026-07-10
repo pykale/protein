@@ -2,7 +2,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict
 import copy
+import importlib
+import importlib.util
 import json
+import sys
 
 @dataclass
 class StreamSpec:
@@ -47,11 +50,33 @@ class AutoProteinConfig:
 
     @classmethod
     def from_yaml(cls, path):
-        text = Path(path).read_text(encoding='utf-8')
+        path = Path(path).resolve()
+        text = path.read_text(encoding='utf-8')
         try:
-            return cls(json.loads(text))
+            data = json.loads(text)
         except json.JSONDecodeError as exc:
-            raise ValueError('YAML parsing requires PyYAML in this minimal environment; use from_preset or JSON-formatted config.') from exc
+            try:
+                import yaml
+            except ImportError as yaml_exc:
+                raise ValueError('YAML parsing requires PyYAML; use JSON-formatted config or install PyYAML.') from yaml_exc
+            data = yaml.safe_load(text)
+            if data is None:
+                raise ValueError(f"Config file is empty: {path}") from exc
+        data['_config_path'] = str(path)
+        data['_config_dir'] = str(path.parent)
+        config_cls = cls
+        target = data.get('auto_map', {}).get('AutoProteinConfig')
+        if target:
+            loaded_cls = _load_auto_object(target, str(path.parent))
+            if issubclass(loaded_cls, cls):
+                config_cls = loaded_cls
+        return config_cls(data)
+
+    @classmethod
+    def from_pretrained(cls, model_id):
+        import kale_protein  # noqa: F401 bootstrap registrations
+        from kale_protein.registry import MODEL_CARD_REGISTRY
+        return cls.from_yaml(MODEL_CARD_REGISTRY.get(model_id))
 
     @classmethod
     def from_dict(cls, config_dict): return cls(config_dict)
@@ -68,6 +93,12 @@ class AutoProteinConfig:
     def __getitem__(self, key): return self._config[key]
     def __contains__(self, key): return key in self._config
     def get_streams(self): return {name: StreamSpec(name=name, **spec) for name, spec in self._config.get('streams', {}).items()}
+    def auto_class(self, auto_name):
+        target = self._config.get('auto_map', {}).get(auto_name)
+        if not target:
+            model_id = self._config.get('model_id', self._config.get('name', '<unknown>'))
+            raise ValueError(f"Config for {model_id!r} does not define auto_map entry for {auto_name}.")
+        return _load_auto_object(target, self._config.get('_config_dir'))
     def validate(self):
         missing=[k for k in ['task','objective','runner','streams'] if k not in self._config]
         if missing: raise ValueError(f"Config missing required fields: {missing}")
@@ -79,3 +110,30 @@ class AutoProteinConfig:
         if self._config['objective']=='generative' and 'head' not in self._config: raise ValueError('Generative tasks must define head.')
         if self._config['runner']=='diffusion_generate' and 'sampling' not in self._config: raise ValueError('diffusion_generate runner requires sampling config.')
         return True
+
+def _load_auto_object(target, config_dir=None):
+    module_name, object_name = target.rsplit('.', 1)
+    module = None
+    if config_dir:
+        module_path = Path(config_dir) / f"{module_name.replace('.', '/')}.py"
+        if module_path.exists():
+            safe_name = f"kale_protein.dynamic.{module_path.stem}_{abs(hash(str(module_path)))}"
+            module = sys.modules.get(safe_name)
+            if module is None:
+                spec = importlib.util.spec_from_file_location(safe_name, module_path)
+                if spec is None or spec.loader is None:
+                    raise ImportError(f"Cannot import auto_map target {target!r} from {module_path}")
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[safe_name] = module
+                inserted = False
+                if str(module_path.parent) not in sys.path:
+                    sys.path.insert(0, str(module_path.parent))
+                    inserted = True
+                try:
+                    spec.loader.exec_module(module)
+                finally:
+                    if inserted:
+                        sys.path.remove(str(module_path.parent))
+    if module is None:
+        module = importlib.import_module(module_name)
+    return getattr(module, object_name)

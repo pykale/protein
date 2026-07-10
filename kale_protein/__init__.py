@@ -8,5 +8,9 @@ def register_builtin_components():
     from .runners import predict_runner as _pr, diffusion_generate_runner as _dgr
     from .tasks.drug_target_interaction import metrics as _dtim, interpreters as _dtii
     from .tasks.inverse_folding import metrics as _ifm, interpreters as _ifi
+    from .tasks.drug_target_interaction import datasets as _dtid
+    from .tasks.inverse_folding import datasets as _ifd
+    from .examples import drugban_dti as _drugban_card
+    from .examples import mapdiff_inverse_folding as _mapdiff_card
     return True
 register_builtin_components()
