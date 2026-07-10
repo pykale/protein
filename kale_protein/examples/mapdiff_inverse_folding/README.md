@@ -11,8 +11,8 @@ import the MapDiff classes from this folder.
 
 ```text
 config.yaml
-configuration_mapdiff.py
-modeling_mapdiff.py
+configuration.py
+modeling.py
 data/
 weights/
 generate.py
@@ -83,7 +83,7 @@ missing, KaleProtein downloads the upstream release weight into this folder.
 
 ## Extending
 
-MapDiff-specific generation code belongs in `modeling_mapdiff.py`;
-configuration logic belongs in `configuration_mapdiff.py`; model-card wiring
+MapDiff-specific generation code belongs in `modeling.py`;
+configuration logic belongs in `configuration.py`; model-card wiring
 belongs in `config.yaml`. Avoid adding MapDiff-specific branches to
 `kale_protein.auto`.

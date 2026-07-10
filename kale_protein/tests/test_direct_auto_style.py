@@ -23,7 +23,7 @@ def test_model_ids_are_model_card_driven_not_auto_hardcoded():
 
     config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
     assert config["model_type"] == "drugban"
-    assert config["auto_map"]["AutoProteinModel"] == "modeling_drugban.DrugBANModel"
+    assert config["auto_map"]["AutoProteinModel"] == "modeling.DrugBANModel"
 
 
 def test_model_cards_do_not_require_pyyaml(monkeypatch):

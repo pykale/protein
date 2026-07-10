@@ -7,7 +7,7 @@ Hugging Face Transformers: generic Auto classes resolve a model card, read its
 
 Model-specific code should not live inside `kale_protein.auto`. Built-in or
 custom models should live in self-contained model-card folders with their own
-`config.yaml`, `configuration_*.py`, `modeling_*.py`, `data/`, and `weights/`
+`config.yaml`, `configuration.py`, `modeling.py`, `data/`, and `weights/`
 layout.
 
 ## Quick Start
@@ -95,8 +95,8 @@ Each model-card folder owns the code for that model:
 ```text
 kale_protein/examples/<model>/
   config.yaml
-  configuration_<model>.py
-  modeling_<model>.py
+  configuration.py
+  modeling.py
   data/
   weights/
   README.md
@@ -109,9 +109,9 @@ weight metadata, and `auto_map` entries. For example:
 model_id: DTI/DrugBAN
 model_type: drugban
 auto_map:
-  AutoProteinConfig: configuration_drugban.DrugBANConfig
-  AutoProteinModel: modeling_drugban.DrugBANModel
-  AutoProteinPredictor: modeling_drugban.DrugBANInteractionPredictor
+  AutoProteinConfig: configuration.DrugBANConfig
+  AutoProteinModel: modeling.DrugBANModel
+  AutoProteinPredictor: modeling.DrugBANInteractionPredictor
 ```
 
 `AutoProteinModel("DTI/DrugBAN")` resolves the registered model card, loads
@@ -155,7 +155,7 @@ model-card folder and `auto_map`, not by adding model-name branches to
 To add a new model:
 
 1. Create a folder under `kale_protein/examples/` or in your own package.
-2. Add `config.yaml`, `configuration_*.py`, and `modeling_*.py`.
+2. Add `config.yaml`, `configuration.py`, and `modeling.py`.
 3. Register the model id with `MODEL_CARD_REGISTRY`.
 4. Put large datasets and weights under `data/` and `weights/`, but keep them
    out of git.
