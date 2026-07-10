@@ -12,8 +12,8 @@ DrugBAN classes from this folder.
 
 ```text
 config.yaml
-configuration_drugban.py
-modeling_drugban.py
+configuration.py
+modeling.py
 data/
 weights/
 evaluate.py
@@ -91,6 +91,6 @@ missing-weight error instead of pretending pretrained weights are available.
 
 ## Extending
 
-DrugBAN-specific model code belongs in `modeling_drugban.py`; configuration
-logic belongs in `configuration_drugban.py`; model-card wiring belongs in
+DrugBAN-specific model code belongs in `modeling.py`; configuration
+logic belongs in `configuration.py`; model-card wiring belongs in
 `config.yaml`. Avoid adding DrugBAN-specific branches to `kale_protein.auto`.

@@ -5,9 +5,9 @@ task: drug_target_interaction
 objective: discriminative
 runner: predict
 auto_map:
-  AutoProteinConfig: configuration_drugban.DrugBANConfig
-  AutoProteinModel: modeling_drugban.DrugBANModel
-  AutoProteinPredictor: modeling_drugban.DrugBANInteractionPredictor
+  AutoProteinConfig: configuration.DrugBANConfig
+  AutoProteinModel: modeling.DrugBANModel
+  AutoProteinPredictor: modeling.DrugBANInteractionPredictor
 pretrained:
   local_dir: weights
   filename: drugban.pt

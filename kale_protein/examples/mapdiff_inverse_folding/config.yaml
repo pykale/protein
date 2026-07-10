@@ -5,9 +5,9 @@ task: inverse_folding
 objective: generative
 runner: diffusion_generate
 auto_map:
-  AutoProteinConfig: configuration_mapdiff.MapDiffConfig
-  AutoProteinModel: modeling_mapdiff.MapDiffModel
-  AutoProteinGenerator: modeling_mapdiff.MapDiffGenerator
+  AutoProteinConfig: configuration.MapDiffConfig
+  AutoProteinModel: modeling.MapDiffModel
+  AutoProteinGenerator: modeling.MapDiffGenerator
 pretrained:
   local_dir: weights
   filename: mapdiff_weight.pt
