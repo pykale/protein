@@ -1,3 +1,4 @@
+import builtins
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -23,6 +24,21 @@ def test_model_ids_are_model_card_driven_not_auto_hardcoded():
     config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
     assert config["model_type"] == "drugban"
     assert config["auto_map"]["AutoProteinModel"] == "modeling_drugban.DrugBANModel"
+
+
+def test_model_cards_do_not_require_pyyaml(monkeypatch):
+    original_import = builtins.__import__
+
+    def import_without_yaml(name, *args, **kwargs):
+        if name == "yaml":
+            raise ImportError("PyYAML intentionally unavailable")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_without_yaml)
+    config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
+
+    assert config["model_id"] == "DTI/DrugBAN"
+    assert config["streams"]["target"]["processor_kwargs"]["max_length"] == 1000
 
 
 def test_drugban_direct_pipeline_style():

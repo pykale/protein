@@ -54,14 +54,15 @@ class AutoProteinConfig:
         text = path.read_text(encoding='utf-8')
         try:
             data = json.loads(text)
-        except json.JSONDecodeError as exc:
+        except json.JSONDecodeError:
             try:
                 import yaml
-            except ImportError as yaml_exc:
-                raise ValueError('YAML parsing requires PyYAML; use JSON-formatted config or install PyYAML.') from yaml_exc
-            data = yaml.safe_load(text)
+            except ImportError:
+                data = _parse_simple_yaml(text, path)
+            else:
+                data = yaml.safe_load(text)
             if data is None:
-                raise ValueError(f"Config file is empty: {path}") from exc
+                raise ValueError(f"Config file is empty: {path}")
         data['_config_path'] = str(path)
         data['_config_dir'] = str(path.parent)
         config_cls = cls
@@ -137,3 +138,88 @@ def _load_auto_object(target, config_dir=None):
     if module is None:
         module = importlib.import_module(module_name)
     return getattr(module, object_name)
+
+def _parse_simple_yaml(text, path):
+    lines = []
+    for raw in text.splitlines():
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
+        lines.append((len(raw) - len(raw.lstrip(" ")), raw.strip()))
+    if not lines:
+        raise ValueError(f"Config file is empty: {path}")
+    data, index = _parse_yaml_block(lines, 0, lines[0][0])
+    if index != len(lines):
+        raise ValueError(f"Cannot parse YAML config near line: {lines[index][1]!r}")
+    return data
+
+def _parse_yaml_block(lines, index, indent):
+    if index >= len(lines):
+        return {}, index
+    if lines[index][0] < indent:
+        return {}, index
+    if lines[index][1].startswith("- "):
+        return _parse_yaml_list(lines, index, indent)
+    return _parse_yaml_mapping(lines, index, indent)
+
+def _parse_yaml_mapping(lines, index, indent):
+    out = {}
+    while index < len(lines):
+        current_indent, stripped = lines[index]
+        if current_indent < indent:
+            break
+        if current_indent > indent:
+            raise ValueError(f"Unexpected indentation near line: {stripped!r}")
+        if stripped.startswith("- "):
+            break
+        if ":" not in stripped:
+            raise ValueError(f"Expected key/value YAML line, got: {stripped!r}")
+        key, value = stripped.split(":", 1)
+        key = key.strip()
+        value = value.strip()
+        index += 1
+        if value:
+            out[key] = _parse_yaml_scalar(value)
+        elif index < len(lines) and lines[index][0] > indent:
+            out[key], index = _parse_yaml_block(lines, index, lines[index][0])
+        else:
+            out[key] = {}
+    return out, index
+
+def _parse_yaml_list(lines, index, indent):
+    out = []
+    while index < len(lines):
+        current_indent, stripped = lines[index]
+        if current_indent < indent:
+            break
+        if current_indent != indent or not stripped.startswith("- "):
+            break
+        value = stripped[2:].strip()
+        index += 1
+        if value:
+            out.append(_parse_yaml_scalar(value))
+        elif index < len(lines) and lines[index][0] > indent:
+            item, index = _parse_yaml_block(lines, index, lines[index][0])
+            out.append(item)
+        else:
+            out.append(None)
+    return out, index
+
+def _parse_yaml_scalar(value):
+    if value in ("{}", "[]"):
+        return {} if value == "{}" else []
+    if value in ("null", "Null", "NULL", "~"):
+        return None
+    if value in ("true", "True", "TRUE"):
+        return True
+    if value in ("false", "False", "FALSE"):
+        return False
+    if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+        return value[1:-1]
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        return value
