@@ -13,6 +13,9 @@ load data -> preprocess -> collate -> embed/model -> train or predict -> evaluat
 DrugBAN and MapDiff are self-contained PyTorch refactors of their upstream
 implementations. KaleProtein never imports either upstream checkout at runtime.
 
+See the [architecture diagram](docs/architecture.md) for the package boundaries,
+model-card discovery path, and end-to-end runtime pipeline.
+
 ## Installation
 
 Install the library with the model extras you need:
