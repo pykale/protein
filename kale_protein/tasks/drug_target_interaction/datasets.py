@@ -1,22 +1,10 @@
-"""Dataset scaffolding for task-level data logic.
-
-Task-level pair construction, splitting, and dataset loading should live here
-rather than inside modality processors.
-"""
+"""Reusable, model-independent drug-target interaction datasets."""
 
 import csv
 from dataclasses import dataclass
 from pathlib import Path
 
 from kale_protein.registry import DATASET_REGISTRY
-
-
-@DATASET_REGISTRY.register("DTI/PDBBind")
-def load_pdbbind_example():
-    return (
-        {"id": "sample_1", "smiles": "CCO", "sequence": "MKTFFVLLL"},
-        1,
-    )
 
 
 @dataclass(frozen=True)
@@ -75,6 +63,8 @@ class DrugTargetInteractionCSVLoader:
         self.default_split = default_split
 
     def __call__(self, root=None, split=None, subset=None, limit=None, path=None):
+        if limit is not None and (not isinstance(limit, int) or isinstance(limit, bool) or limit < 0):
+            raise ValueError("limit must be a non-negative integer or None.")
         csv_path = self.resolve_path(root=root, split=split, subset=subset, path=path)
         samples = _read_dti_csv(csv_path, self.dataset_key, limit=limit)
         return DrugTargetInteractionDataset(
@@ -94,15 +84,19 @@ class DrugTargetInteractionCSVLoader:
                 "Pass root='path/to/DrugBAN/datasets' or path='path/to/file.csv'."
             )
         root = Path(root)
-        dataset_root = root if root.name == self.directory_name else root / self.directory_name
+        dataset_root = root if root.name.lower() == self.directory_name.lower() else root / self.directory_name
         split = split or self.default_split
         if split in (None, "full"):
             return _require_file(dataset_root / "full.csv")
         if subset is None:
             raise ValueError(
-                f"Loading split {split!r} for {self.dataset_key} requires subset='train', 'val', or 'test'."
+                f"Loading split {split!r} for {self.dataset_key} requires subset filename such as "
+                "'train', 'test', or 'target_test'."
             )
-        return _require_file(dataset_root / split / f"{subset}.csv")
+        split = _safe_path_part(split, "split")
+        subset = _safe_path_part(subset, "subset")
+        filename = subset if subset.lower().endswith(".csv") else f"{subset}.csv"
+        return _require_file(dataset_root / split / filename)
 
 
 def _register_dti_dataset(*ids, directory_name, default_split="full"):
@@ -139,13 +133,23 @@ def _read_dti_csv(path, dataset_name, limit=None):
         for index, row in enumerate(reader):
             if limit is not None and len(samples) >= limit:
                 break
-            sample_id = row.get(id_field) if id_field else f"{dataset_name}:{index}"
+            sample_id = row.get(id_field, "").strip() if id_field else ""
+            sample_id = sample_id or f"{dataset_name}:{index}"
+            smiles = row[smiles_field].strip()
+            sequence = row[sequence_field].strip()
+            if not smiles:
+                raise ValueError(f"Empty SMILES at row {index + 2} in DTI dataset CSV: {path}")
+            if not sequence:
+                raise ValueError(f"Empty protein sequence at row {index + 2} in DTI dataset CSV: {path}")
+            mapped_fields = {smiles_field, sequence_field, label_field}
+            if id_field:
+                mapped_fields.add(id_field)
             samples.append(
                 DrugTargetInteractionSample(
                     id=sample_id,
-                    smiles=row[smiles_field],
-                    sequence=row[sequence_field],
-                    label=_parse_label(row[label_field]),
+                    smiles=smiles,
+                    sequence=sequence,
+                    label=_parse_label(row[label_field], path=path, row_number=index + 2),
                     dataset=dataset_name,
                     metadata={
                         "row_index": index,
@@ -154,6 +158,9 @@ def _read_dti_csv(path, dataset_name, limit=None):
                             "smiles": smiles_field,
                             "sequence": sequence_field,
                             "label": label_field,
+                        },
+                        "extra_fields": {
+                            key: value for key, value in row.items() if key not in mapped_fields
                         },
                     },
                 ).to_dict()
@@ -176,13 +183,21 @@ def _find_optional_column(fields, candidates):
     return None
 
 
-def _parse_label(value):
+def _parse_label(value, *, path=None, row_number=None):
     text = str(value).strip()
     try:
         as_float = float(text)
-    except ValueError:
-        return text
+    except ValueError as error:
+        location = f" at row {row_number} in {path}" if path is not None else ""
+        raise ValueError(f"DTI labels must be numeric; got {value!r}{location}.") from error
     return int(as_float) if as_float.is_integer() else as_float
+
+
+def _safe_path_part(value, name):
+    text = str(value).strip()
+    if not text or Path(text).name != text or text in {".", ".."}:
+        raise ValueError(f"{name} must be a single safe path component; got {value!r}.")
+    return text
 
 
 _SMILES_COLUMNS = (

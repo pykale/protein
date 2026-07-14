@@ -1,39 +1,50 @@
-import sys
+"""Evaluate a MapDiff checkpoint on PDB or processed CATH graphs."""
+
+import argparse
+import json
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+import torch
 
-from kale_protein.auto import (
-    AutoProteinConfig,
-    AutoProteinData,
-    AutoProteinEvaluator,
-    AutoProteinGenerator,
-    AutoProteinModel,
-    AutoProteinPreprocessor,
-)
+from kale_protein.auto import AutoProteinData, AutoProteinModel, AutoProteinPreprocessor
+from kale_protein.tasks.inverse_folding.collators import CollatorDiff
+from kale_protein.tasks.inverse_folding.metrics import Diversity, Perplexity, SequenceRecovery
 
 
-data, native_sequence = AutoProteinData("InverseFolding/CATH")
-structure_preprocessor = AutoProteinPreprocessor("protein/structure")
-sequence_preprocessor = AutoProteinPreprocessor("protein/masked_sequence")
+def build_parser():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("data", type=Path)
+    weights = parser.add_mutually_exclusive_group()
+    weights.add_argument("--checkpoint", type=Path)
+    weights.add_argument("--pretrained", action="store_true", help="Resolve and strictly load the configured v1.0.1 release.")
+    parser.add_argument("--steps", type=int, default=50)
+    parser.add_argument("--method", choices=("ddim", "ddpm"), default="ddim")
+    parser.add_argument("--num-samples", type=int, default=1)
+    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--seed", type=int, default=42)
+    return parser
 
-structure_encoder = AutoProteinModel("InverseFolding/MapDiff", pretrain=False)
-sequence_generator = AutoProteinGenerator("InverseFolding/MapDiff", pretrain=False)
 
-structure_data = {
-    "structure": structure_preprocessor.featurize(data),
-    "noisy_sequence": sequence_preprocessor.tokenize(data),
-}
+def main(argv=None):
+    args = build_parser().parse_args(argv)
+    torch.manual_seed(args.seed)
+    dataset = AutoProteinData("InverseFolding/CATH", source=args.data)
+    preprocessor = AutoProteinPreprocessor("protein/structure")
+    processed_graphs = [preprocessor.featurize(record)["graph"] for record in dataset]
+    batch = CollatorDiff()(processed_graphs).to(args.device)
+    model = AutoProteinModel("InverseFolding/MapDiff", pretrain=args.pretrained).to(args.device)
+    if args.checkpoint:
+        model.load_compatible_checkpoint(args.checkpoint)
+    model.eval()
+    output = model.sample(batch, {"steps": args.steps, "method": args.method, "num_samples": args.num_samples})
+    metrics = {
+        "sequence_recovery": SequenceRecovery()(output, batch.graph.sequences),
+        "perplexity": Perplexity()(output, batch.graph.sequences),
+        "diversity": Diversity()(output),
+    }
+    print(json.dumps(metrics, indent=2))
+    return metrics
 
-structure_embedding = structure_encoder.embed(structure_data)
-generated_sequence = sequence_generator.generate(structure_embedding)
 
-metrics = AutoProteinEvaluator.from_config(AutoProteinConfig.from_preset("mapdiff")).evaluate(
-    generated_sequence,
-    [{"sequence": native_sequence}],
-)
-
-print(generated_sequence)
-print(metrics)
+if __name__ == "__main__":
+    main()

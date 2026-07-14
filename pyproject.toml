@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kale-protein"
+version = "0.1.0"
+description = "Registry-driven protein and small-molecule workflows"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+dependencies = [
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+drugban = [
+    "rdkit>=2022.9",
+    "torch>=2.0",
+]
+mapdiff = [
+    "torch>=2.0",
+]
+dev = [
+    "build>=1.2",
+    "pytest>=7.0",
+]
+
+[tool.setuptools]
+include-package-data = false
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
+
+[tool.setuptools.packages.find]
+include = ["kale_protein*"]
+exclude = ["kale_protein.tests*"]
+namespaces = true
+
+[tool.setuptools.package-data]
+kale_protein = [
+    "**/*.json",
+    "**/*.map",
+    "**/*.yaml",
+    "**/*.yml",
+]
+
+[tool.setuptools.exclude-package-data]
+kale_protein = [
+    "**/data/*",
+    "**/data/**/*",
+    "**/weights/*",
+    "**/weights/**/*",
+]

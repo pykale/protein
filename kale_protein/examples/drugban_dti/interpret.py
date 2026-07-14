@@ -1,3 +1,8 @@
+"""Map DrugBAN bilinear attention to molecule atoms and protein residues."""
+
+from __future__ import annotations
+
+import argparse
 import sys
 from pathlib import Path
 
@@ -6,34 +11,46 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from kale_protein.auto import (
-    AutoMoleculePreprocessor,
-    AutoProteinData,
-    AutoProteinInterpreter,
-    AutoProteinModel,
-    AutoProteinPredictor,
+    AutoProteinConfig, AutoProteinInterpreter, AutoProteinPredictor,
     AutoProteinPreprocessor,
-    AutoProteinConfig,
+)
+from kale_protein.examples.drugban_dti._cli import (
+    LazyPreprocessedDataset, add_data_arguments, load_dataset,
+    load_requested_checkpoint, print_json, resolve_device, seed_everything,
 )
 
 
-data, label = AutoProteinData("DTI/PDBBind")
-preprocessor_protein = AutoProteinPreprocessor("protein/sequence")
-preprocessor_drug = AutoMoleculePreprocessor("molecule/SMILE")
-protein_model, molecule_model = AutoProteinModel("DTI/DrugBAN", pretrain=False)
-interaction_predictor = AutoProteinPredictor("DTI/DrugBAN", pretrain=False)
+def build_parser():
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_data_arguments(parser)
+    parser.add_argument("--checkpoint", type=Path)
+    parser.add_argument("--pretrain", action="store_true")
+    return parser
 
-protein_data = preprocessor_protein.tokenize(data)
-drug_data = preprocessor_drug.tokenize(data)
 
-protein_embedding = protein_model.embed(protein_data)
-drug_embedding = molecule_model.embed(drug_data)
+def main(argv=None):
+    args = build_parser().parse_args(argv)
+    seed_everything(args.seed)
+    dataset = load_dataset(args)
+    config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
+    preprocessor = AutoProteinPreprocessor.from_config(config)
+    processed = LazyPreprocessedDataset(dataset, preprocessor)
+    predictor = AutoProteinPredictor("DTI/DrugBAN", pretrain=args.pretrain)
+    predictor.to(resolve_device(args.device))
+    load_requested_checkpoint(predictor, args)
+    loader = predictor.make_dataloader(
+        processed, batch_size=args.batch_size, num_workers=args.num_workers
+    )
+    interpreter = AutoProteinInterpreter.from_config(config)
+    samples = []
+    for batch in loader:
+        embeddings = predictor.embed_components(batch)
+        predictor(embeddings["target"], embeddings["drug"])
+        samples.extend(interpreter.explain(predictor, batch)["samples"])
+    result = {"samples": samples}
+    print_json(result)
+    return result
 
-interaction_prediction = interaction_predictor(protein_embedding, drug_embedding)
-interpreter = AutoProteinInterpreter.from_config(AutoProteinConfig.from_preset("drugban"))
-interpretation = interpreter.explain(
-    interaction_predictor,
-    [{"target": protein_data, "drug": drug_data, "label": label}],
-)
 
-print(interaction_prediction)
-print(interpretation)
+if __name__ == "__main__":
+    main()

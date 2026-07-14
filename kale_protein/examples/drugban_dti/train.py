@@ -1,3 +1,8 @@
+"""Train DrugBAN on a local BindingDB, Human, or BioSNAP split."""
+
+from __future__ import annotations
+
+import argparse
 import sys
 from pathlib import Path
 
@@ -6,31 +11,75 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from kale_protein.auto import (
-    AutoMoleculePreprocessor,
+    AutoProteinConfig,
     AutoProteinData,
-    AutoProteinModel,
     AutoProteinPredictor,
     AutoProteinPreprocessor,
 )
-
-
-data, label = AutoProteinData("DTI/PDBBind")
-preprocessor_protein = AutoProteinPreprocessor("protein/sequence")
-preprocessor_drug = AutoMoleculePreprocessor("molecule/SMILE")
-protein_model, molecule_model = AutoProteinModel("DTI/DrugBAN", pretrain=False)
-interaction_predictor = AutoProteinPredictor("DTI/DrugBAN", pretrain=False)
-
-protein_data = preprocessor_protein.tokenize(data)
-drug_data = preprocessor_drug.tokenize(data)
-
-protein_embedding = protein_model.embed(protein_data)
-drug_embedding = molecule_model.embed(drug_data)
-
-interaction_prediction = interaction_predictor(protein_embedding, drug_embedding)
-training_result = interaction_predictor.fit(
-    [{"target": protein_data, "drug": drug_data, "label": label}],
-    valid_data=None,
+from kale_protein.examples.drugban_dti._cli import (
+    DATASETS, LazyPreprocessedDataset, add_data_arguments, load_dataset, print_json,
+    resolve_device, seed_everything,
 )
 
-print(interaction_prediction)
-print(training_result)
+
+def build_parser():
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_data_arguments(parser)
+    parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--learning-rate", type=float, default=5e-5)
+    parser.add_argument("--checkpoint", type=Path, required=True)
+    parser.add_argument("--pretrain", action="store_true")
+    parser.add_argument(
+        "--validation-subset",
+        help="Optional validation CSV basename in the same split, e.g. val or target_test",
+    )
+    return parser
+
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
+    seed_everything(args.seed)
+    dataset = load_dataset(args)
+    config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
+    preprocessor = AutoProteinPreprocessor.from_config(config)
+    processed = LazyPreprocessedDataset(dataset, preprocessor)
+    predictor = AutoProteinPredictor("DTI/DrugBAN", pretrain=args.pretrain)
+    predictor.to(resolve_device(args.device))
+    loader = predictor.make_dataloader(
+        processed,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=args.num_workers,
+    )
+    validation = None
+    if args.validation_subset:
+        if args.path:
+            raise ValueError("--validation-subset requires --root; a single --path has no sibling split")
+        validation_data = AutoProteinData(
+            DATASETS[args.dataset],
+            root=args.root,
+            path=None,
+            split=args.split,
+            subset=args.validation_subset,
+            limit=args.limit,
+        )
+        validation = LazyPreprocessedDataset(validation_data, preprocessor)
+    first_batch = next(iter(loader))
+    embeddings = predictor.embed_components(first_batch)
+    result = predictor.fit(
+        loader, valid_data=validation, epochs=args.epochs, learning_rate=args.learning_rate,
+        batch_size=args.batch_size,
+    )
+    predictor.save_checkpoint(args.checkpoint, extra={"training": result})
+    print_json({
+        "checkpoint": str(args.checkpoint),
+        "training": result,
+        "embedding_shapes": {
+            name: list(component["embedding"].shape) for name, component in embeddings.items()
+        },
+    })
+    return result
+
+
+if __name__ == "__main__":
+    main()

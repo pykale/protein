@@ -1,13 +1,5 @@
-"""Collator scaffolding for modality-specific batching.
+"""Shared protein-structure collation extension point.
 
-The v0.1 toy workflows operate on individual processed samples, so full
-batching/collation is intentionally deferred. This module exists as the stable
-extension point listed in PLAN.md.
+MapDiff's paired graph/IPA collators are task-level utilities in
+``tasks.inverse_folding.collators``.
 """
-
-
-class IdentityCollator:
-    """Return samples unchanged for toy and custom single-sample workflows."""
-
-    def __call__(self, samples):
-        return samples

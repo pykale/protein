@@ -17,19 +17,11 @@ class AutoMoleculePreprocessor:
         return super().__new__(cls)
 
 class SingleModalityPreprocessor:
-    ALIASES = {
-        "protein/sequence": ("protein_sequence", "amino_acid_tokenizer", "sequence"),
-        "protein/masked_sequence": ("protein_sequence", "masked_sequence_tokenizer", "sequence"),
-        "protein/structure": ("protein_structure", "backbone_coordinate_processor", "backbone_coords"),
-        "molecule/SMILE": ("small_molecule", "rdkit_graph", "smiles"),
-        "molecule/SMILES": ("small_molecule", "rdkit_graph", "smiles"),
-        "molecule/smiles": ("small_molecule", "rdkit_graph", "smiles"),
-    }
     def __init__(self, preprocessor_id, **kwargs):
-        if preprocessor_id not in self.ALIASES:
-            raise ValueError(f"Unknown preprocessor id: {preprocessor_id}")
-        modality, processor, input_key = self.ALIASES[preprocessor_id]
-        self.processor = MODALITY_PROCESSOR_REGISTRY.get((modality, processor))(input_key=input_key, **kwargs)
+        processor_cls, input_key = MODALITY_PROCESSOR_REGISTRY.resolve(preprocessor_id)
+        if input_key is not None:
+            kwargs.setdefault("input_key", input_key)
+        self.processor = processor_cls(**kwargs)
     def tokenize(self, data): return self.processor.transform(data)
     def featurize(self, data): return self.processor.transform(data)
 

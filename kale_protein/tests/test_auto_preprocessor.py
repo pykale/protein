@@ -1,6 +1,6 @@
 from kale_protein.auto import AutoProteinConfig, AutoProteinPreprocessor
 
-def test_drugban_preprocess():
+def test_drugban_preprocess(fake_rdkit_graph):
     cfg=AutoProteinConfig.from_preset('drugban')
     p=AutoProteinPreprocessor.from_config(cfg)
     out=p.transform_sample({'smiles':'CCO','sequence':'MKTFFVLLL','label':1})

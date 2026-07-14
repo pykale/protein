@@ -12,6 +12,49 @@ pretrained:
   local_dir: weights
   filename: mapdiff_weight.pt
   url: https://github.com/peizhenbai/MapDiff/releases/download/v1.0.1/mapdiff_weight.pt
+  format: upstream-mapdiff-v1
+  architecture: upstream-mapdiff-v1
+model:
+  architecture: kale-mapdiff-v1
+  hidden_dim: 96
+  egnn_layers: 3
+  ipa_layers: 2
+  ipa_heads: 4
+  ipa_head_dim: 16
+  ipa_points: 3
+  dropout: 0.05
+upstream:
+  architecture: upstream-mapdiff-v1
+  input_feat_dim: 31
+  edge_attr_dim: 93
+  hidden_dim: 128
+  depth: 6
+  drop_out: 0.1
+  update_edge: true
+  update_coors: true
+  update_global: true
+  norm_coors: true
+  norm_feat: true
+  embedding: true
+  embedding_dim: 128
+  embed_ss: -3
+  ipa_drop_out: 0.2
+  ipa_depth: 6
+  ipa_heads: 4
+  qk_points: 4
+  v_points: 8
+  timesteps: 500
+  ddim_steps: 100
+  noise_type: marginal
+  sample_method: ddim
+  min_mask_ratio: 0.4
+  dev_mask_ratio: 0.2
+  marginal_map: maps/train_marginal_x.json
+diffusion:
+  timesteps: 100
+  prior_loss_weight: 1.0
+  min_mask_ratio: 0.35
+  mask_ratio_deviation: 0.25
 streams:
   structure:
     modality: protein_structure
@@ -41,13 +84,14 @@ head:
     hidden_dim: 128
     vocab_size: 25
 sampling:
-  steps: 100
-  num_samples: 8
+  steps: 25
+  method: ddim
+  num_samples: 1
   temperature: 1.0
 evaluation:
   metrics:
     - sequence_recovery
+    - perplexity
     - diversity
-    - novelty
 interpretation:
   method: denoising_trajectory
