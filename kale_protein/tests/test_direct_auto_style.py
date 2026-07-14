@@ -2,6 +2,8 @@ import builtins
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import torch
+
 from kale_protein.auto import (
     AutoMoleculePreprocessor,
     AutoProteinConfig,
@@ -41,8 +43,15 @@ def test_model_cards_do_not_require_pyyaml(monkeypatch):
     assert config["streams"]["target"]["processor_kwargs"]["max_length"] == 1000
 
 
-def test_drugban_direct_pipeline_style():
-    data, label = AutoProteinData("DTI/PDBBind")
+def test_drugban_direct_pipeline_style(fake_rdkit_graph, tmp_path):
+    dataset_dir = tmp_path / "bindingdb"
+    dataset_dir.mkdir()
+    (dataset_dir / "full.csv").write_text(
+        "SMILES,Protein,Y\nCCO,MKTFFVLLLMKTFFVLLL,1\n",
+        encoding="utf-8",
+    )
+    data = AutoProteinData("DTI/BindingDB", root=tmp_path)[0]
+    label = data["label"]
     preprocessor_protein = AutoProteinPreprocessor("protein/sequence")
     preprocessor_drug = AutoMoleculePreprocessor("molecule/SMILE")
     protein_model, molecule_model = AutoProteinModel("DTI/DrugBAN", pretrain=False)
@@ -106,8 +115,20 @@ def test_pretrained_resolver_uses_fake_downloader():
         assert path.read_text(encoding="utf-8") == "downloaded from https://example.test/fake.pt"
 
 
-def test_mapdiff_direct_generative_pipeline_style():
-    data, native_sequence = AutoProteinData("InverseFolding/CATH")
+def test_mapdiff_direct_generative_pipeline_style(tmp_path):
+    torch.save(
+        {
+            "atom_pos": [
+                [[-1.2, 0.1, 0.0], [0.0, 0.0, 0.0], [1.4, 0.2, 0.0], [2.0, 1.2, 0.0]],
+                [[2.1, -0.8, 0.1], [3.5, -0.7, 0.0], [4.2, 0.6, 0.1], [5.4, 0.7, 0.0]],
+            ],
+            "sequence": "MA",
+        },
+        tmp_path / "protein.pt",
+    )
+    graph = AutoProteinData("InverseFolding/CATH", source=tmp_path)[0]
+    native_sequence = graph.sequence
+    data = {"backbone_coords": graph.atom_pos, "sequence": native_sequence}
     structure_preprocessor = AutoProteinPreprocessor("protein/structure")
     sequence_preprocessor = AutoProteinPreprocessor("protein/masked_sequence")
     structure_encoder = AutoProteinModel("InverseFolding/MapDiff", pretrain=False)

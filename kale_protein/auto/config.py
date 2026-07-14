@@ -1,11 +1,15 @@
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Dict
 import copy
+import hashlib
 import importlib
 import importlib.util
 import json
+import os
 import sys
+import types
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict
 
 @dataclass
 class StreamSpec:
@@ -17,31 +21,6 @@ class StreamSpec:
     processor_kwargs: Dict[str, Any] = field(default_factory=dict)
     encoder_kwargs: Dict[str, Any] = field(default_factory=dict)
     optional: bool = False
-
-_DRUGBAN = {
-    'name':'drugban','task':'drug_target_interaction','objective':'discriminative','runner':'predict',
-    'streams':{
-        'drug':{'modality':'small_molecule','input_key':'smiles','processor':'rdkit_graph','encoder':'drugban_molecule_gnn','processor_kwargs':{},'encoder_kwargs':{'hidden_dim':128,'output_dim':128}},
-        'target':{'modality':'protein_sequence','input_key':'sequence','processor':'amino_acid_tokenizer','encoder':'drugban_protein_cnn','processor_kwargs':{'max_length':1000},'encoder_kwargs':{'hidden_dim':128,'output_dim':128}},
-    },
-    'fusion':{'type':'bilinear_attention','kwargs':{'hidden_dim':256}},
-    'head':{'type':'binary_classifier','kwargs':{'input_dim':256,'hidden_dim':128,'output_dim':1}},
-    'loss':{'type':'binary_cross_entropy'},
-    'evaluation':{'metrics':['auroc','auprc','accuracy','f1']},
-    'interpretation':{'method':'bilinear_attention_map'},
-}
-_MAPDIFF = {
-    'name':'mapdiff','task':'inverse_folding','objective':'generative','runner':'diffusion_generate',
-    'streams':{
-        'structure':{'modality':'protein_structure','input_key':'backbone_coords','processor':'backbone_coordinate_processor','encoder':'mapdiff_structure_encoder','processor_kwargs':{},'encoder_kwargs':{'hidden_dim':128}},
-        'noisy_sequence':{'modality':'protein_sequence','input_key':'sequence','processor':'masked_sequence_tokenizer','encoder':'residue_token_embedding','processor_kwargs':{'max_length':512,'mask_token':'<mask>'},'encoder_kwargs':{'hidden_dim':128}},
-    },
-    'conditioner':{'type':'structure_conditioned_denoising','kwargs':{'hidden_dim':128}},
-    'head':{'type':'diffusion_sequence_decoder','kwargs':{'hidden_dim':128,'vocab_size':25}},
-    'sampling':{'steps':100,'num_samples':8,'temperature':1.0},
-    'evaluation':{'metrics':['sequence_recovery','diversity','novelty']},
-    'interpretation':{'method':'denoising_trajectory'},
-}
 
 class AutoProteinConfig:
     def __init__(self, config_dict):
@@ -84,10 +63,22 @@ class AutoProteinConfig:
 
     @classmethod
     def from_preset(cls, preset_name):
-        if preset_name == 'drugban': return cls(_DRUGBAN)
-        if preset_name == 'mapdiff': return cls(_MAPDIFF)
-        path = Path(__file__).resolve().parents[1] / 'presets' / f'{preset_name}.yaml'
-        raise FileNotFoundError(f"Unknown preset {preset_name!r}: {path}")
+        import kale_protein  # noqa: F401 bootstrap registrations
+        from kale_protein.registry import PRESET_REGISTRY
+
+        registered = PRESET_REGISTRY.get(preset_name)
+        if isinstance(registered, Mapping):
+            return cls.from_dict(registered)
+        if isinstance(registered, (str, os.PathLike)):
+            path = Path(registered)
+            if path.is_file():
+                return cls.from_yaml(path)
+            if isinstance(registered, str):
+                return cls.from_pretrained(registered)
+        raise TypeError(
+            f"Preset {preset_name!r} must resolve to a config mapping, model id, or config path; "
+            f"got {type(registered).__name__}."
+        )
 
     def to_dict(self): return copy.deepcopy(self._config)
     def get(self, key, default=None): return self._config.get(key, default)
@@ -118,26 +109,57 @@ def _load_auto_object(target, config_dir=None):
     if config_dir:
         module_path = Path(config_dir) / f"{module_name.replace('.', '/')}.py"
         if module_path.exists():
-            safe_name = f"kale_protein.dynamic.{module_path.stem}_{abs(hash(str(module_path)))}"
-            module = sys.modules.get(safe_name)
-            if module is None:
-                spec = importlib.util.spec_from_file_location(safe_name, module_path)
-                if spec is None or spec.loader is None:
-                    raise ImportError(f"Cannot import auto_map target {target!r} from {module_path}")
-                module = importlib.util.module_from_spec(spec)
-                sys.modules[safe_name] = module
-                inserted = False
-                if str(module_path.parent) not in sys.path:
-                    sys.path.insert(0, str(module_path.parent))
-                    inserted = True
-                try:
-                    spec.loader.exec_module(module)
-                finally:
-                    if inserted:
-                        sys.path.remove(str(module_path.parent))
+            module = _load_card_module(module_name, module_path, Path(config_dir))
     if module is None:
         module = importlib.import_module(module_name)
     return getattr(module, object_name)
+
+
+def _load_card_module(module_name, module_path, config_dir):
+    """Load one card module in a stable private package.
+
+    Giving each card its own package prevents two cards named ``modeling.py``
+    from colliding and permits ordinary relative imports between card files.
+    """
+
+    digest = hashlib.sha256(str(config_dir.resolve()).encode("utf-8")).hexdigest()[:16]
+    namespace = "kale_protein.dynamic"
+    card_package = f"{namespace}.card_{digest}"
+    _ensure_namespace_package(namespace, [])
+    _ensure_namespace_package(card_package, [str(config_dir.resolve())])
+
+    parts = module_name.split(".")
+    for index in range(1, len(parts)):
+        package_name = f"{card_package}.{'/'.join(parts[:index])}".replace("/", ".")
+        package_path = config_dir.joinpath(*parts[:index])
+        _ensure_namespace_package(package_name, [str(package_path.resolve())])
+
+    qualified_name = f"{card_package}.{module_name}"
+    module = sys.modules.get(qualified_name)
+    if module is not None:
+        return module
+
+    spec = importlib.util.spec_from_file_location(qualified_name, module_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot import model-card module {qualified_name!r} from {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[qualified_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        sys.modules.pop(qualified_name, None)
+        raise
+    return module
+
+
+def _ensure_namespace_package(name, paths):
+    module = sys.modules.get(name)
+    if module is None:
+        module = types.ModuleType(name)
+        module.__package__ = name
+        module.__path__ = list(paths)
+        sys.modules[name] = module
+    return module
 
 def _parse_simple_yaml(text, path):
     lines = []

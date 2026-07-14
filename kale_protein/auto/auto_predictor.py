@@ -1,67 +1,69 @@
-import kale_protein  # noqa
-from kale_protein.registry import MODALITY_ENCODER_REGISTRY,FUSION_REGISTRY,CONDITIONER_REGISTRY,HEAD_REGISTRY,RUNNER_REGISTRY
-from kale_protein.auto.config import AutoProteinConfig
+"""Model-card dispatch for trainable and generative Auto classes."""
+
+from __future__ import annotations
+
+from .config import AutoProteinConfig
+
+
+def _coerce_config(model_id_or_config):
+    if isinstance(model_id_or_config, AutoProteinConfig):
+        return model_id_or_config
+    if isinstance(model_id_or_config, str):
+        return AutoProteinConfig.from_pretrained(model_id_or_config)
+    raise TypeError(
+        "Expected a model id string or AutoProteinConfig, got "
+        f"{type(model_id_or_config).__name__}."
+    )
+
+
+def _from_config(config, auto_name, *, pretrain=False, **kwargs):
+    config = _coerce_config(config)
+    implementation = config.auto_class(auto_name)
+    return implementation(config=config, pretrain=pretrain, **kwargs)
+
 
 class AutoProteinModel:
-    def __new__(cls, model_id=None, *, pretrain=False, component=None):
-        if cls is AutoProteinModel and isinstance(model_id, str):
-            config = AutoProteinConfig.from_pretrained(model_id)
-            model = config.auto_class("AutoProteinModel")(config=config, pretrain=pretrain)
-            if component:
-                return model.component(component)
-            return model
-        return super().__new__(cls)
+    """Resolve the model implementation declared by a model card."""
 
-class AutoProteinGenerator:
-    def __new__(cls, model_id=None, *, pretrain=False):
-        if isinstance(model_id, str):
-            config = AutoProteinConfig.from_pretrained(model_id)
-            return config.auto_class("AutoProteinGenerator")(config=config, pretrain=pretrain)
-        return super().__new__(cls)
-
-class MultiStreamProteinModel:
-    def __init__(self, config):
-        self.config=config; self.encoders={}
-        for name, stream in config.get_streams().items():
-            self.encoders[name]=MODALITY_ENCODER_REGISTRY.get((stream.modality, stream.encoder))(**stream.encoder_kwargs)
-        self.fusion=None
-        if config.get('fusion'):
-            f=config['fusion']; self.fusion=FUSION_REGISTRY.get(f['type'])(**f.get('kwargs',{}))
-        self.conditioner=None
-        if config.get('conditioner'):
-            c=config['conditioner']; self.conditioner=CONDITIONER_REGISTRY.get(c['type'])(**c.get('kwargs',{}))
-        self.head=HEAD_REGISTRY.get((config['task'], config['head']['type']))(**config['head'].get('kwargs',{}))
-    def encode_streams(self,batch): return {n:e(batch[n]) for n,e in self.encoders.items()}
-    def component(self, stream_name): return StreamEncoder(self.encoders[stream_name], stream_name)
-    def embed(self, stream_data):
-        if self.config.get('conditioner') and 'structure' in stream_data:
-            batch = dict(stream_data)
-            if 'noisy_sequence' not in batch:
-                sequence = batch.get('sequence', {'tokens':[0], 'attention_mask':[1]})
-                batch['noisy_sequence'] = sequence
-            return self.conditioner(self.encode_streams(batch), timestep=batch.get('timestep'))
-        if len(self.encoders) == 1:
-            name = next(iter(self.encoders))
-            return self.encoders[name](stream_data)
-        raise ValueError('embed() for multi-stream models requires a named component from AutoProteinModel(..., component=...).')
-    def __call__(self,batch):
-        so=self.encode_streams(batch)
-        if self.fusion is not None: return self.head(self.fusion(so))
-        if self.conditioner is not None: return self.head(self.conditioner(so, timestep=batch.get('timestep')))
-        return self.head(so)
-    def sample(self,batch,sampling_config):
-        so=self.encode_streams(batch); features=self.conditioner(so, timestep=batch.get('timestep')) if self.conditioner else so
-        return self.head.sample(features, sampling_config)
-class AutoProteinPredictor:
-    def __new__(cls, model_id=None, *, pretrain=False):
-        if cls is AutoProteinPredictor and isinstance(model_id, str):
-            config = AutoProteinConfig.from_pretrained(model_id)
-            return config.auto_class("AutoProteinPredictor")(config=config, pretrain=pretrain)
-        return super().__new__(cls)
+    def __new__(cls, model_id=None, *, pretrain=False, component=None, **kwargs):
+        if cls is not AutoProteinModel:
+            return super().__new__(cls)
+        model = cls.from_config(model_id, pretrain=pretrain, **kwargs)
+        return model.component(component) if component is not None else model
 
     @classmethod
-    def from_config(cls, config): return RUNNER_REGISTRY.get(config['runner'])(model=MultiStreamProteinModel(config), config=config)
+    def from_config(cls, config, *, pretrain=False, component=None, **kwargs):
+        model = _from_config(
+            config, "AutoProteinModel", pretrain=pretrain, **kwargs
+        )
+        return model.component(component) if component is not None else model
 
-class StreamEncoder:
-    def __init__(self, encoder, stream_name): self.encoder=encoder; self.stream_name=stream_name
-    def embed(self, stream_data): return self.encoder(stream_data)
+
+class AutoProteinPredictor:
+    """Resolve a task predictor declared by a model card."""
+
+    def __new__(cls, model_id=None, *, pretrain=False, **kwargs):
+        if cls is not AutoProteinPredictor:
+            return super().__new__(cls)
+        return cls.from_config(model_id, pretrain=pretrain, **kwargs)
+
+    @classmethod
+    def from_config(cls, config, *, pretrain=False, **kwargs):
+        return _from_config(
+            config, "AutoProteinPredictor", pretrain=pretrain, **kwargs
+        )
+
+
+class AutoProteinGenerator:
+    """Resolve a generative pipeline declared by a model card."""
+
+    def __new__(cls, model_id=None, *, pretrain=False, **kwargs):
+        if cls is not AutoProteinGenerator:
+            return super().__new__(cls)
+        return cls.from_config(model_id, pretrain=pretrain, **kwargs)
+
+    @classmethod
+    def from_config(cls, config, *, pretrain=False, **kwargs):
+        return _from_config(
+            config, "AutoProteinGenerator", pretrain=pretrain, **kwargs
+        )

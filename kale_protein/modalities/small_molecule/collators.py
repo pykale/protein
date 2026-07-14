@@ -1,13 +1,5 @@
-"""Collator scaffolding for modality-specific batching.
+"""Shared small-molecule collation extension point.
 
-The v0.1 toy workflows operate on individual processed samples, so full
-batching/collation is intentionally deferred. This module exists as the stable
-extension point listed in PLAN.md.
+DrugBAN's graph padding is architecture-specific and therefore lives with its
+model card.
 """
-
-
-class IdentityCollator:
-    """Return samples unchanged for toy and custom single-sample workflows."""
-
-    def __call__(self, samples):
-        return samples

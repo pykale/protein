@@ -1,13 +1,5 @@
-"""Collator scaffolding for modality-specific batching.
+"""Reusable protein-sequence collation belongs here when model-agnostic.
 
-The v0.1 toy workflows operate on individual processed samples, so full
-batching/collation is intentionally deferred. This module exists as the stable
-extension point listed in PLAN.md.
+Current model cards own their padding conventions because DrugBAN and MapDiff
+use different alphabets, masks, and training targets.
 """
-
-
-class IdentityCollator:
-    """Return samples unchanged for toy and custom single-sample workflows."""
-
-    def __call__(self, samples):
-        return samples

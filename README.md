@@ -1,42 +1,34 @@
 # KaleProtein
 
-KaleProtein is a stream-based Auto framework for protein, small-molecule, and
-protein-design workflows. Its Auto APIs follow the same architectural idea as
-Hugging Face Transformers: generic Auto classes resolve a model card, read its
-`auto_map`, and dispatch to model-specific configuration and modeling files.
+KaleProtein provides Hugging Face-style Auto APIs for protein, molecule, and
+multimodal biological models. Generic Auto classes resolve a model card and its
+`auto_map`; named architectures remain inside their model-card directories.
 
-Model-specific code should not live inside `kale_protein.auto`. Built-in or
-custom models should live in self-contained model-card folders with their own
-`config.yaml`, `configuration.py`, `modeling.py`, `data/`, and `weights/`
-layout.
+The examples expose their real stages directly:
 
-## Quick Start
-
-Install test dependencies and run the suite:
-
-```bash
-python -m pip install pytest
-python -m pytest -q kale_protein/tests
+```text
+load data -> preprocess -> collate -> embed/model -> train or predict -> evaluate -> interpret (optional)
 ```
 
-Run the DrugBAN DTI example:
+DrugBAN and MapDiff are self-contained PyTorch refactors of their upstream
+implementations. KaleProtein never imports either upstream checkout at runtime.
+
+## Installation
+
+Install the library with the model extras you need:
 
 ```bash
-python kale_protein/examples/drugban_dti/evaluate.py
-python kale_protein/examples/drugban_dti/train.py
-python kale_protein/examples/drugban_dti/interpret.py
+python -m pip install -e ".[drugban]"
+python -m pip install -e ".[mapdiff]"
+python -m pip install -e ".[drugban,mapdiff,dev]"
 ```
 
-Run the MapDiff inverse-folding example:
+The base package can load configurations and lightweight datasets without
+PyTorch. DrugBAN raw-SMILES processing requires RDKit; MapDiff requires PyTorch.
 
-```bash
-python kale_protein/examples/mapdiff_inverse_folding/generate.py
-python kale_protein/examples/mapdiff_inverse_folding/evaluate.py
-```
+## DrugBAN
 
-## Auto Pipeline Style
-
-Drug-target interaction:
+This is the direct Auto pipeline for a real DrugBAN-format BindingDB split:
 
 ```python
 from kale_protein.auto import (
@@ -47,23 +39,78 @@ from kale_protein.auto import (
     AutoProteinPreprocessor,
 )
 
-data, label = AutoProteinData("DTI/PDBBind")
-preprocessor_protein = AutoProteinPreprocessor("protein/sequence")
-preprocessor_drug = AutoMoleculePreprocessor("molecule/SMILE")
+# 1. Load a normalized DTI dataset.
+dataset = AutoProteinData(
+    "DTI/BindingDB",
+    root="path/to/DrugBAN/datasets",
+    split="random",
+    subset="test",
+)
+sample = dataset[0]
 
-protein_model, molecule_model = AutoProteinModel("DTI/DrugBAN", pretrain=False)
-interaction_predictor = AutoProteinPredictor("DTI/DrugBAN", pretrain=False)
+# 2. Build reusable modality preprocessors.
+protein_preprocessor = AutoProteinPreprocessor("protein/sequence")
+molecule_preprocessor = AutoMoleculePreprocessor("molecule/SMILES")
 
-protein_data = preprocessor_protein.tokenize(data)
-drug_data = preprocessor_drug.tokenize(data)
+# 3. Resolve the card-owned DrugBAN components.
+protein_model, molecule_model = AutoProteinModel(
+    "DTI/DrugBAN",
+    pretrain=False,
+)
+interaction_predictor = AutoProteinPredictor(
+    "DTI/DrugBAN",
+    pretrain=False,
+)
 
-protein_embedding = protein_model.embed(protein_data)
-drug_embedding = molecule_model.embed(drug_data)
+# 4. Preprocess and collate.
+protein_data = protein_preprocessor.tokenize(sample)
+molecule_data = molecule_preprocessor.featurize(sample)
+batch = interaction_predictor.collator(
+    [{"target": protein_data, "drug": molecule_data, "label": sample["label"]}]
+)
 
-interaction_prediction = interaction_predictor(protein_embedding, drug_embedding)
+# 5. Embed each modality and predict the interaction.
+protein_embedding = protein_model.embed(batch["target"])
+molecule_embedding = molecule_model.embed(batch["drug"])
+interaction_prediction = interaction_predictor(
+    protein_embedding,
+    molecule_embedding,
+)
 ```
 
-Generative inverse folding:
+The card implements the original model family as learnable PyTorch modules:
+canonical 74-feature RDKit atoms plus the virtual-node bit, molecular graph
+convolutions, DrugBAN protein encoding and CNNs, bilinear attention, and the MLP
+decoder. It does not require DGL or DGL-LifeSci.
+
+Run distinct workflows:
+
+```bash
+python -m kale_protein.examples.drugban_dti.train \
+  --dataset BindingDB --root /data/drugban --split random --subset train \
+  --validation-subset val --checkpoint drugban.pt
+
+python -m kale_protein.examples.drugban_dti.evaluate \
+  --dataset BindingDB --root /data/drugban --split random --subset test \
+  --checkpoint drugban.pt
+
+python -m kale_protein.examples.drugban_dti.predict \
+  --smiles "CCO" --sequence "MKT..." --checkpoint drugban.pt
+
+python -m kale_protein.examples.drugban_dti.interpret \
+  --dataset BioSNAP --path /data/biosnap/full.csv --checkpoint drugban.pt
+```
+
+Training performs optimizer updates and checkpoint saving. Evaluation computes
+AUROC, AUPRC, F1, accuracy, and the selected threshold. Prediction performs
+inference only. Interpretation maps actual BAN attention to valid atoms and
+protein residues.
+
+See [the DrugBAN model-card README](kale_protein/examples/drugban_dti/README.md).
+
+## MapDiff
+
+MapDiff applies the same direct style to a generative pipeline:
 
 ```python
 from kale_protein.auto import (
@@ -72,25 +119,107 @@ from kale_protein.auto import (
     AutoProteinModel,
     AutoProteinPreprocessor,
 )
+from kale_protein.tasks.inverse_folding import CollatorDiff
 
-data, native_sequence = AutoProteinData("InverseFolding/CATH")
+# 1. Load processed CATH .pt graphs, a directory of PDBs, or one PDB.
+dataset = AutoProteinData(
+    "InverseFolding/CATH",
+    source="path/to/cath/test",
+)
+record = dataset[0]
+
+# 2. Preprocess the protein backbone.
 structure_preprocessor = AutoProteinPreprocessor("protein/structure")
-sequence_preprocessor = AutoProteinPreprocessor("protein/masked_sequence")
+structure_data = structure_preprocessor.featurize(
+    {
+        "backbone_coords": record.atom_pos,
+        "sequence": record.sequence,
+        "id": record.identifier,
+    }
+)
 
-structure_encoder = AutoProteinModel("InverseFolding/MapDiff", pretrain=False)
-sequence_generator = AutoProteinGenerator("InverseFolding/MapDiff", pretrain=False)
+# 3. Collate sparse EGNN and padded IPA views.
+batch = CollatorDiff()([structure_data["graph"]])
 
-structure_data = {
-    "structure": structure_preprocessor.featurize(data),
-    "noisy_sequence": sequence_preprocessor.tokenize(data),
-}
-structure_embedding = structure_encoder.embed(structure_data)
-generated_sequence = sequence_generator.generate(structure_embedding)
+# 4. Load the released architecture and weights.
+structure_model = AutoProteinModel(
+    "InverseFolding/MapDiff",
+    pretrain=True,
+)
+sequence_generator = AutoProteinGenerator(
+    "InverseFolding/MapDiff",
+    pretrain=True,
+)
+
+# 5. Embed the structure and run iterative sequence diffusion.
+structure_embedding = structure_model.embed(batch)
+generation = sequence_generator.generate(
+    structure_embedding,
+    steps=100,
+    method="ddim",
+)
 ```
 
-## Model-Card Layout
+`pretrain=True` selects the release-compatible architecture and strictly loads
+the published v1.0.1 checkpoint: 464 state entries and 14,821,937 tensor
+elements. The runtime is plain PyTorch and does not require PyG, `torch_scatter`,
+OpenFold, `einops`, Hydra, Biopython, or DSSP.
 
-Each model-card folder owns the code for that model:
+The card also contains a smaller `kale-mapdiff-v1` architecture for local
+training and fast tests:
+
+```bash
+python -m kale_protein.examples.mapdiff_inverse_folding.pretrain_ipa \
+  /data/cath/train --output ipa.pt
+
+python -m kale_protein.examples.mapdiff_inverse_folding.train_diffusion \
+  /data/cath/train --ipa-checkpoint ipa.pt --output mapdiff.pt
+
+python -m kale_protein.examples.mapdiff_inverse_folding.evaluate \
+  /data/cath/test --pretrained
+
+python -m kale_protein.examples.mapdiff_inverse_folding.generate \
+  structure.pdb --pretrained --steps 100
+```
+
+Generation returns sequences, logits, and a non-empty denoising trajectory.
+Evaluation reports sequence recovery, perplexity, and diversity. Raw PDB inputs
+cannot reproduce CATH-normalized SASA, B-factor, and DSSP channels, so those
+channels are zero-filled; processed CATH graphs remain the best input for
+published-checkpoint quality.
+
+See [the MapDiff model-card README](kale_protein/examples/mapdiff_inverse_folding/README.md).
+
+## Reusable DTI Data
+
+BindingDB, Human, and BioSNAP share one task-level CSV implementation, so any DTI
+model can reuse them:
+
+```python
+bindingdb = AutoProteinData("DTI/BindingDB", root="path/to/datasets")
+human_train = AutoProteinData(
+    "DTI/Human",
+    root="path/to/datasets",
+    split="random",
+    subset="train",
+)
+biosnap_target_test = AutoProteinData(
+    "DTI/BioSNAP",
+    root="path/to/datasets",
+    split="cluster",
+    subset="target_test",
+)
+```
+
+`root` may be the upstream `datasets/` directory or one dataset directory.
+`full.csv` loads the complete set; `<split>/<subset>.csv` loads named splits,
+including upstream domain-adaptation files such as `source_train` and
+`target_test`. Column aliases are normalized to `smiles`, `sequence`, and a
+numeric `label`, while source fields and provenance remain in `metadata`.
+
+## Model Cards
+
+Every named model owns its implementation and assets:
 
 ```text
 kale_protein/examples/<model>/
@@ -98,101 +227,54 @@ kale_protein/examples/<model>/
   configuration.py
   modeling.py
   data/
+  maps/
   weights/
   README.md
 ```
 
-`config.yaml` declares the task, streams, processors, encoders, heads, pretrained
-weight metadata, and `auto_map` entries. For example:
-
-```yaml
-model_id: DTI/DrugBAN
-model_type: drugban
-auto_map:
-  AutoProteinConfig: configuration.DrugBANConfig
-  AutoProteinModel: modeling.DrugBANModel
-  AutoProteinPredictor: modeling.DrugBANInteractionPredictor
-```
-
-`AutoProteinModel("DTI/DrugBAN")` resolves the registered model card, loads
-`config.yaml`, imports the classes declared in `auto_map`, and instantiates the
-model. The Auto layer performs lookup and dispatch only; DrugBAN and MapDiff
-model-specific code stays in their example folders.
-
-## Pretrained Weights
-
-Each model card may define a pretrained block:
-
-```yaml
-pretrained:
-  local_dir: weights
-  filename: model.pt
-  url: ""
-```
-
-When `pretrain=True`:
-
-1. KaleProtein first looks for the local file under the model card's `weights/`
-   folder.
-2. If the file is missing and `url` is valid, it downloads the file into
-   `weights/`.
-3. If neither a local file nor a valid URL is available, it raises a clear error
-   telling the user to provide weights or train the model.
-
-DrugBAN intentionally ships with an empty pretrained URL. MapDiff points to the
-upstream release weight URL declared in its model card.
-
-## Registries
-
-Common processors, encoders, heads, tasks, evaluators, and datasets are
-registered in shared registries. This is appropriate for broadly reusable
-modalities and tasks. Specific model definitions should be added through a
-model-card folder and `auto_map`, not by adding model-name branches to
-`kale_protein.auto`.
-
-## DTI Datasets
-
-The DTI data layer includes reusable loaders for the DrugBAN-style BindingDB,
-Human, and BioSNAP datasets. These loaders are registered at the task level, so
-any DTI model can use them through `AutoProteinData`:
+`config.yaml` declares `model_id`, architecture metadata, pretrained assets, and
+`auto_map` targets. Built-in cards are discovered from their configuration
+metadata. External cards can be registered without editing an Auto class:
 
 ```python
-from kale_protein.auto import AutoProteinData
+from kale_protein.registry import register_model_card
 
-bindingdb = AutoProteinData("DTI/BindingDB", root="path/to/DrugBAN/datasets")
-human_train = AutoProteinData(
-    "DTI/Human",
-    root="path/to/DrugBAN/datasets",
-    split="random",
-    subset="train",
-)
-biosnap_test = AutoProteinData(
-    "DTI/BioSNAP",
-    root="path/to/DrugBAN/datasets",
-    split="cluster",
-    subset="test",
-)
+register_model_card("path/to/my_model/config.yaml")
+model = AutoProteinModel("MyTask/MyModel")
 ```
 
-`root` may point either to the upstream `datasets/` directory or directly to one
-dataset directory. Full datasets load from `full.csv`; split datasets load from
-`<split>/<subset>.csv`. Rows are normalized to dictionaries with `smiles`,
-`sequence`, and `label` keys while preserving source metadata.
+The Auto layer contains no DrugBAN or MapDiff definitions, branches, or embedded
+presets. Relative imports between external card files are isolated in a private
+per-card module namespace.
 
-## Customization
+## Pretrained Assets
 
-To add a new model:
+For `pretrain=True`, KaleProtein:
 
-1. Create a folder under `kale_protein/examples/` or in your own package.
-2. Add `config.yaml`, `configuration.py`, and `modeling.py`.
-3. Register the model id with `MODEL_CARD_REGISTRY`.
-4. Put large datasets and weights under `data/` and `weights/`, but keep them
-   out of git.
-5. Load it with `AutoProteinModel("<task>/<model>")` or the matching Auto class.
+1. checks the card's local `weights/` path;
+2. verifies an optional SHA-256 checksum;
+3. atomically downloads a valid configured URL when the file is absent;
+4. extracts raw, `model`, `state_dict`, or `model_state_dict` checkpoints;
+5. strictly loads the architecture-specific state dictionary;
+6. removes partial files when download or verification fails.
 
-For lower-level component customization, see [CUSTOMIZE.md](CUSTOMIZE.md).
+DrugBAN intentionally has no pretrained URL and raises a train-it-yourself
+error when no local checkpoint exists. MapDiff uses the published v1.0.1 release
+URL. Large weights and datasets are excluded from packages and version control;
+small construction maps are packaged with their cards.
 
-## Continuous Integration
+## Development
 
-The GitHub Actions workflow at `.github/workflows/tests.yml` runs tests,
-byte-compiles the package, and executes the example scripts.
+Tests use temporary CSVs and `.pt` graphs, fake RDKit objects, fake URLs and
+downloaders, and small trainable configurations. They never download real large
+weights.
+
+```bash
+python -m pytest -q
+python -m compileall -q kale_protein
+python -m build
+```
+
+See [CUSTOMIZE.md](CUSTOMIZE.md) for adding datasets, preprocessors, and model
+cards. Refactored-source attribution and licenses are recorded in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

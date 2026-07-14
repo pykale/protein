@@ -19,6 +19,7 @@ def test_bindingdb_full_loader_normalizes_drugban_columns(tmp_path):
     assert dataset[0]["smiles"] == "CCO"
     assert dataset[0]["sequence"] == "MKTFFVLLL"
     assert dataset[0]["label"] == 1
+    assert dataset[0]["metadata"]["extra_fields"] == {}
     assert dataset.labels == [1, 0]
 
     direct_dataset = AutoProteinData("DTI/bindingdb", root=dataset_dir, limit=1)
@@ -61,3 +62,46 @@ def test_split_loader_requires_subset(tmp_path):
 
     with pytest.raises(ValueError, match="requires subset"):
         AutoProteinData("DTI/BindingDB", root=tmp_path, split="random")
+
+
+def test_cluster_loader_accepts_upstream_target_subset_names(tmp_path):
+    split_dir = tmp_path / "bindingdb" / "cluster"
+    split_dir.mkdir(parents=True)
+    (split_dir / "target_test.csv").write_text(
+        "SMILES,Protein,Y,fold\nCCO,MKT,1,target\n",
+        encoding="utf-8",
+    )
+
+    dataset = AutoProteinData(
+        "DTI/BindingDB",
+        root=tmp_path,
+        split="cluster",
+        subset="target_test.csv",
+    )
+
+    assert dataset[0]["metadata"]["extra_fields"] == {"fold": "target"}
+
+
+def test_loader_rejects_invalid_labels_with_row_context(tmp_path):
+    dataset_dir = tmp_path / "human"
+    dataset_dir.mkdir()
+    (dataset_dir / "full.csv").write_text(
+        "SMILES,Protein,Y\nCCO,MKT,positive\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"numeric.*row 2"):
+        AutoProteinData("DTI/Human", root=tmp_path)
+
+
+@pytest.mark.parametrize("limit", [-1, 1.5, True])
+def test_loader_validates_limit(limit, tmp_path):
+    dataset_dir = tmp_path / "biosnap"
+    dataset_dir.mkdir()
+    (dataset_dir / "full.csv").write_text(
+        "SMILES,Protein,Y\nCCO,MKT,1\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="non-negative integer"):
+        AutoProteinData("DTI/BioSNAP", root=tmp_path, limit=limit)
