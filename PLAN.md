@@ -44,6 +44,6 @@ load -> preprocess -> collate -> embed -> predict/generate -> evaluate -> interp
 
 ```bash
 python -m pytest -q
-python -m compileall -q kale_protein
+python -m compileall -q kaleprotein
 python -m build
 ```

@@ -32,7 +32,22 @@ jobs:
         run: python -m pytest -q
 
       - name: Byte-compile package
-        run: python -m compileall -q kale_protein
+        run: python -m compileall -q kaleprotein
 
       - name: Build distributions
         run: python -m build
+
+      - name: Verify wheel package boundary
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          wheel = next(Path("dist").glob("*.whl"))
+          with ZipFile(wheel) as archive:
+              names = archive.namelist()
+
+          assert any(name.startswith("kaleprotein/") for name in names)
+          forbidden = ("kale_protein/", "examples/", "tests/")
+          assert not any(name.startswith(forbidden) for name in names), names
+          PY

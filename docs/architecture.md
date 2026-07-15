@@ -1,11 +1,23 @@
 # KaleProtein Architecture
 
 The repository has three layers: generic Auto dispatch, reusable core
-components, and complete model examples.
+components, and complete model examples. Only the `kaleprotein/` library package
+is installed; `examples/`, `tests/`, and `docs/` remain repository-level
+resources.
+
+```text
+kaleprotein/
+  auto/
+  core/
+examples/
+tests/
+docs/
+```
 
 ```mermaid
 flowchart TB
-    subgraph CORE["core: shared and reusable"]
+    subgraph PACKAGE["installed package: kaleprotein/"]
+      subgraph CORE["core: shared and reusable"]
         direction LR
         CORE_DATA["data/<br/>modalities + tasks"]
         CORE_MODELING["modeling/<br/>modalities + tasks"]
@@ -13,9 +25,9 @@ flowchart TB
         REGISTRY["registry/"]
         CONFIG["config/"]
         WEIGHTS["weights/"]
-    end
+      end
 
-    subgraph AUTO["auto: selection and construction"]
+      subgraph AUTO["auto: selection and construction"]
         direction LR
         DATA["AutoProteinData"]
         PREP["AutoProteinPreprocessor"]
@@ -27,9 +39,10 @@ flowchart TB
         DATA --> PREP --> MODEL --> EVAL --> INTERP
         MODEL --> EMBED
         MODEL --> PREDICT
+      end
     end
 
-    subgraph EXAMPLES["examples: complete named models"]
+    subgraph EXAMPLES["repository examples/: complete named models"]
         direction LR
         DRUGBAN["drugban_dti/<br/>config + model + scripts + assets"]
         MAPDIFF["mapdiff_inverse_folding/<br/>config + model + scripts + assets"]
@@ -140,3 +153,8 @@ flowchart LR
 Adding a new model normally adds one example directory and model card. Core is
 changed only when the model introduces a genuinely reusable component; Auto is
 not changed.
+
+In a source checkout, `kaleprotein` discovers cards from the adjacent
+`examples/` directory. Installed wheels do not include those examples; users or
+downstream packages register external model cards through
+`discover_model_cards(...)` or `register_model_card(...)`.
