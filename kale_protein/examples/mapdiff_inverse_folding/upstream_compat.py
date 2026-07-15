@@ -15,7 +15,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from kale_protein.core.tasks.inverse_folding.datasets import AA_ALPHABET, DiffusionBatch, IPABatch
+from kale_protein.core.data.tasks.inverse_folding.datasets import AA_ALPHABET, DiffusionBatch, IPABatch
 
 
 UPSTREAM_ALPHABET = "ARNDCQEGHILKMFPSTWYV"

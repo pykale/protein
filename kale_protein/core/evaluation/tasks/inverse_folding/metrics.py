@@ -6,7 +6,7 @@ import math
 from itertools import combinations
 
 from kale_protein.core.registry import EVALUATOR_REGISTRY
-from kale_protein.core.tasks.inverse_folding.datasets import AA_ALPHABET, AA_TO_INDEX
+from kale_protein.core.data.tasks.inverse_folding.datasets import AA_ALPHABET, AA_TO_INDEX
 
 
 def _sequences(value):

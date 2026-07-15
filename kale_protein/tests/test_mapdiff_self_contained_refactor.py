@@ -7,11 +7,11 @@ import torch
 from kale_protein.auto import AutoProteinConfig, AutoProteinModel
 from kale_protein.examples.mapdiff_inverse_folding.modeling import MapDiffModel
 from kale_protein.examples.mapdiff_inverse_folding.upstream_compat import UpstreamMapDiff
-from kale_protein.core.modalities.structure.processors import BackboneCoordinateProcessor
-from kale_protein.core.tasks.inverse_folding.collators import CollatorDiff, CollatorIPAPretrain
-from kale_protein.core.tasks.inverse_folding.datasets import CATHGraphDataset, build_residue_graph
-from kale_protein.core.tasks.inverse_folding.interpreters import DenoisingTrajectoryInterpreter
-from kale_protein.core.tasks.inverse_folding.metrics import Diversity, Perplexity, SequenceRecovery
+from kale_protein.core.data.modalities.structure.processors import BackboneCoordinateProcessor
+from kale_protein.core.data.tasks.inverse_folding.collators import CollatorDiff, CollatorIPAPretrain
+from kale_protein.core.data.tasks.inverse_folding.datasets import CATHGraphDataset, build_residue_graph
+from kale_protein.core.evaluation.tasks.inverse_folding.interpreters import DenoisingTrajectoryInterpreter
+from kale_protein.core.evaluation.tasks.inverse_folding.metrics import Diversity, Perplexity, SequenceRecovery
 
 
 def _coords(length=4, shift=0.0):

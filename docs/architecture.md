@@ -7,11 +7,12 @@ components, and complete model examples.
 flowchart TB
     subgraph CORE["core: shared and reusable"]
         direction LR
+        CORE_DATA["data/<br/>modalities + tasks"]
+        CORE_MODELING["modeling/<br/>modalities + tasks"]
+        CORE_EVAL["evaluation/<br/>task metrics + interpretation"]
         REGISTRY["registry/"]
         CONFIG["config/"]
         WEIGHTS["weights/"]
-        MODALITIES["modalities/<br/>sequence, molecule, structure"]
-        TASKS["tasks/<br/>dti, inverse_folding"]
     end
 
     subgraph AUTO["auto: selection and construction"]
@@ -125,9 +126,12 @@ flowchart LR
 ## Ownership Rules
 
 - `auto/` owns generic dispatch only.
-- `core/modalities/` owns reusable modality processors and encoders.
-- `core/tasks/` owns reusable datasets, collators, task heads, metrics, and
-  interpreters.
+- `core/data/modalities/` owns reusable modality processors.
+- `core/data/tasks/` owns reusable task datasets and collators.
+- `core/modeling/modalities/` owns reusable modality encoders and neural layers.
+- `core/modeling/tasks/` owns reusable fusion layers, heads, predictors, and
+  generators.
+- `core/evaluation/tasks/` owns task metrics and interpretation methods.
 - `examples/<model>/` owns concrete model composition, model-specific layers,
   forward/generate behavior, scripts, and checkpoint adapters.
 - The complete model is the sole owner of full-model weight resolution and

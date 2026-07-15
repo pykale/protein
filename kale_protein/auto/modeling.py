@@ -32,9 +32,9 @@ def _build_component(registry, spec, *, config=None, **overrides):
 def _import_shared_component_namespace(registry, component_id):
     namespace = component_id.partition("/")[0].casefold()
     if registry is EMBEDDER_REGISTRY and namespace in {"sequence", "molecule", "structure"}:
-        importlib.import_module(f"kale_protein.core.modalities.{namespace}.embedders")
+        importlib.import_module(f"kale_protein.core.modeling.modalities.{namespace}.embedders")
     elif registry is PREDICTOR_REGISTRY and namespace in {"dti", "inverse_folding"}:
-        importlib.import_module(f"kale_protein.core.tasks.{namespace}.predictors")
+        importlib.import_module(f"kale_protein.core.modeling.tasks.{namespace}.predictors")
 
 
 class AutoProteinModel:

@@ -1,4 +1,4 @@
-"""Reusable configuration, registries, modalities, tasks, and weight loading."""
+"""Reusable data, modeling, evaluation, configuration, and infrastructure."""
 
 from .config import AutoProteinConfig, ComponentSpec, StreamSpec
 from .registry import (

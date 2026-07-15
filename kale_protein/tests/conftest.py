@@ -14,7 +14,7 @@ def fake_rdkit_graph(monkeypatch):
 
     import torch
 
-    from kale_protein.core.modalities.molecule.processors import RDKitGraphProcessor
+    from kale_protein.core.data.modalities.molecule.processors import RDKitGraphProcessor
 
     def transform(processor, sample):
         smiles = sample[processor.input_key]

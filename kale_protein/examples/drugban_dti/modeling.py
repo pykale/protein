@@ -15,7 +15,7 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
 from kale_protein.auto import AutoProteinEmbedder, AutoProteinPredictor
-from kale_protein.core.modalities.molecule.processors import RDKitGraphProcessor
+from kale_protein.core.data.modalities.molecule.processors import RDKitGraphProcessor
 from kale_protein.core.weights import load_checkpoint_state_dict, resolve_pretrained_weight
 
 
@@ -326,7 +326,7 @@ class DrugBANModel(nn.Module):
         labels=None,
         **prediction,
     ):
-        from kale_protein.core.tasks.dti.metrics import compute_metrics
+        from kale_protein.core.evaluation.tasks.dti.metrics import compute_metrics
 
         if probabilities is None:
             if data is None:

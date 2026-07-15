@@ -10,8 +10,8 @@ import torch
 from torch import nn
 
 from kale_protein.auto import AutoProteinEmbedder, AutoProteinPredictor
-from kale_protein.core.tasks.inverse_folding.collators import CollatorDiff, CollatorIPAPretrain
-from kale_protein.core.tasks.inverse_folding.datasets import (
+from kale_protein.core.data.tasks.inverse_folding.collators import CollatorDiff, CollatorIPAPretrain
+from kale_protein.core.data.tasks.inverse_folding.datasets import (
     DiffusionBatch,
     GraphBatch,
     coerce_protein_graph,
@@ -313,7 +313,7 @@ class MapDiffModel(nn.Module):
         return self.predictor.prior_pretrain_loss(ipa_batch)
 
     def evaluate(self, sequences, reference_sequences, logits=None, **generation):
-        from kale_protein.core.tasks.inverse_folding.metrics import (
+        from kale_protein.core.evaluation.tasks.inverse_folding.metrics import (
             Diversity,
             Perplexity,
             SequenceRecovery,

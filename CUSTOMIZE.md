@@ -6,7 +6,7 @@ directory.
 
 ## Add Reusable Data
 
-Task datasets belong in `core/tasks/<task>/datasets.py` and register a stable
+Task datasets belong in `core/data/tasks/<task>/datasets.py` and register a stable
 id:
 
 ```python
@@ -29,7 +29,7 @@ must not import a concrete model.
 
 ## Add A Reusable Preprocessor
 
-Modality processors belong in `core/modalities/<modality>/processors.py`:
+Modality processors belong in `core/data/modalities/<modality>/processors.py`:
 
 ```python
 from kale_protein.core.registry import PREPROCESSOR_REGISTRY
@@ -56,7 +56,8 @@ class MyTokenizer:
 ## Add Reusable Model Components
 
 Reusable modality encoders register as embedders. Reusable task fusion and
-heads register as predictors:
+heads register as predictors. Put them in `core/modeling/modalities/` and
+`core/modeling/tasks/`, respectively:
 
 ```python
 from torch import nn

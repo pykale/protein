@@ -7,7 +7,7 @@ import math
 import torch
 from torch import nn
 
-from kale_protein.core.tasks.inverse_folding.datasets import AA_ALPHABET, DiffusionBatch, IPABatch
+from kale_protein.core.data.tasks.inverse_folding.datasets import AA_ALPHABET, DiffusionBatch, IPABatch
 
 from kale_protein.examples.mapdiff_inverse_folding.egnn import EGNNSequenceDenoiser
 from kale_protein.examples.mapdiff_inverse_folding.ipa import IPAMaskPrior

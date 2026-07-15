@@ -6,8 +6,8 @@ import torch
 
 from kale_protein.auto import AutoProteinConfig
 from kale_protein.examples.drugban_dti.modeling import DrugBANModel
-from kale_protein.core.modalities.molecule import processors
-from kale_protein.core.tasks.dti.metrics import (
+from kale_protein.core.data.modalities.molecule import processors
+from kale_protein.core.evaluation.tasks.dti.metrics import (
     MetricUndefinedError,
     compute_metrics,
 )

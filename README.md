@@ -29,16 +29,17 @@ kale_protein/
     evaluation.py
     interpretation.py
   core/                         # reusable building blocks
+    data/
+      modalities/               # sequence, molecule, structure preprocessing
+      tasks/                    # task datasets and collators
+    modeling/
+      modalities/               # reusable encoders and neural layers
+      tasks/                    # fusion, heads, predictors, generators
+    evaluation/
+      tasks/                    # metrics and interpretation
     registry/
     config/
     weights/
-    modalities/
-      sequence/
-      molecule/
-      structure/
-    tasks/
-      dti/
-      inverse_folding/
   examples/                     # complete named model implementations
     drugban_dti/
     mapdiff_inverse_folding/

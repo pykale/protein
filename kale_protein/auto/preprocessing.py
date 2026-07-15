@@ -10,7 +10,7 @@ def _load_preprocessor(preprocessor_id):
     if not PREPROCESSOR_REGISTRY.has(preprocessor_id):
         namespace = preprocessor_id.partition("/")[0].casefold()
         if namespace in {"sequence", "molecule", "structure"}:
-            importlib.import_module(f"kale_protein.core.modalities.{namespace}.processors")
+            importlib.import_module(f"kale_protein.core.data.modalities.{namespace}.processors")
     return PREPROCESSOR_REGISTRY.get(preprocessor_id)
 
 

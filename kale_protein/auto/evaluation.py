@@ -50,8 +50,8 @@ def _import_task_module(task, module):
     if not isinstance(task, str) or not task.isidentifier():
         raise ValueError(f"Task names used for Auto discovery must be identifiers; got {task!r}.")
     try:
-        importlib.import_module(f"kale_protein.core.tasks.{task}.{module}")
+        importlib.import_module(f"kale_protein.core.evaluation.tasks.{task}.{module}")
     except ModuleNotFoundError as error:
-        if error.name == f"kale_protein.core.tasks.{task}":
+        if error.name == f"kale_protein.core.evaluation.tasks.{task}":
             return
         raise

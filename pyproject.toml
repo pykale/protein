@@ -45,8 +45,8 @@ kale_protein = [
 
 [tool.setuptools.exclude-package-data]
 kale_protein = [
-    "**/data/*",
-    "**/data/**/*",
-    "**/weights/*",
-    "**/weights/**/*",
+    "examples/*/data/*",
+    "examples/*/data/**/*",
+    "examples/*/weights/*",
+    "examples/*/weights/**/*",
 ]
