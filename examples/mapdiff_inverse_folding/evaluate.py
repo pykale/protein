@@ -7,12 +7,10 @@ from pathlib import Path
 import torch
 
 from kaleprotein.auto import (
-    AutoProteinCollator,
     AutoProteinConfig,
-    AutoProteinData,
+    AutoProteinDataLoader,
     AutoProteinInterpreter,
     AutoProteinModel,
-    AutoProteinPreprocessor,
 )
 from examples._utils import move_to_device
 
@@ -26,6 +24,8 @@ def build_parser():
     parser.add_argument("--steps", type=int, default=50)
     parser.add_argument("--method", choices=("ddim", "ddpm"), default="ddim")
     parser.add_argument("--num-samples", type=int, default=1)
+    parser.add_argument("--batch-size", type=int, default=8)
+    parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--seed", type=int, default=42)
     return parser
@@ -35,39 +35,63 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     torch.manual_seed(args.seed)
 
-    # 1. Load normalized inverse-folding records.
-    data = AutoProteinData("CATH/InverseFolding", source=args.data)
-
-    # 2. Preprocess protein backbones.
+    # 1. Load, preprocess, collate, and batch inverse-folding records.
     config = AutoProteinConfig.from_pretrained("InverseFolding/MapDiff")
-    preprocessor = AutoProteinPreprocessor.from_config(config)
-    processed = preprocessor.process(data)
+    loader = AutoProteinDataLoader(
+        "CATH/InverseFolding",
+        config=config,
+        source=args.data,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+    )
 
-    # 3. Collate data independently from the model.
-    collator = AutoProteinCollator.from_config(config)
-    batch = move_to_device(collator(**processed), args.device)
-
-    # 4. Build the complete model and load requested weights.
+    # 2. Build the complete model and load requested weights.
     model = AutoProteinModel(
         "InverseFolding/MapDiff",
         pretrain=args.pretrained,
         checkpoint=args.checkpoint,
     ).to(args.device)
+    interpreter = AutoProteinInterpreter.from_config(config)
     model.eval()
 
-    # 5. Embed the structural condition and generate sequences.
+    # 3. Embed structural conditions and generate sequences for every batch.
+    sequences = []
+    recovery_references = []
+    perplexity_references = []
+    logits = []
+    interpretations = []
     with torch.no_grad():
-        embeddings = model.embed(**batch)
-        generation = model.predictor.generate(
-            **embeddings,
-            steps=args.steps,
-            method=args.method,
-            num_samples=args.num_samples,
-        )
+        for inputs in loader:
+            inputs = move_to_device(inputs, args.device)
+            embeddings = model.embed(**inputs)
+            generation = model.predictor.generate(
+                **embeddings,
+                steps=args.steps,
+                method=args.method,
+                num_samples=args.num_samples,
+            )
+            references = list(generation["reference_sequences"])
+            sequences.extend(generation["sequences"])
+            recovery_references.extend(references * args.num_samples)
+            perplexity_references.extend(references)
+            if generation.get("logits") is not None:
+                logits.append(generation["logits"].detach().cpu())
+            interpretations.append(interpreter.explain(**generation))
+    if not sequences:
+        raise ValueError("Cannot evaluate an empty inverse-folding dataset.")
 
-    # 6. Evaluate or interpret the generation mapping.
-    metrics = model.evaluate(**generation)
-    interpretation = AutoProteinInterpreter.from_config(config).explain(**generation)
+    # 4. Evaluate and interpret the collected generation mapping.
+    collected = {
+        "sequences": sequences,
+        "reference_sequences": recovery_references,
+        "perplexity_reference_sequences": perplexity_references,
+        "logits": torch.cat(logits) if logits else None,
+    }
+    metrics = model.evaluate(**collected)
+    interpretation = {
+        "batches": interpretations,
+        "final_sequences": sequences,
+    }
     result = {"metrics": metrics, "interpretation": interpretation}
     print(json.dumps(result, indent=2))
     return metrics

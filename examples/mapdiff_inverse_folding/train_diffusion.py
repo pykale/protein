@@ -4,14 +4,11 @@ import argparse
 from pathlib import Path
 
 import torch
-from torch.utils.data import DataLoader
 
 from kaleprotein.auto import (
-    AutoProteinCollator,
     AutoProteinConfig,
-    AutoProteinData,
+    AutoProteinDataLoader,
     AutoProteinModel,
-    AutoProteinPreprocessor,
 )
 from examples._utils import move_to_device
 
@@ -34,18 +31,15 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     torch.manual_seed(args.seed)
 
-    # 1. Load, preprocess, and collate CATH or PDB graphs.
-    data = AutoProteinData("CATH/InverseFolding", source=args.data)
+    # 1. Load, preprocess, collate, and batch CATH or PDB structures.
     config = AutoProteinConfig.from_pretrained("InverseFolding/MapDiff")
-    preprocessor = AutoProteinPreprocessor.from_config(config)
-    processed = preprocessor.process(data)
-    collator = AutoProteinCollator.from_config(config)
-    loader = DataLoader(
-        processed["samples"],
+    loader = AutoProteinDataLoader(
+        "CATH/InverseFolding",
+        config=config,
+        source=args.data,
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
-        collate_fn=collator,
     )
     # 2. Build the complete model and restore optional checkpoints.
     model = AutoProteinModel(
@@ -56,10 +50,10 @@ def main(argv=None):
 
     # 3. Train the complete categorical diffusion objective.
     for _ in range(args.epochs):
-        for batch in loader:
+        for inputs in loader:
             optimizer.zero_grad(set_to_none=True)
-            batch = move_to_device(batch, args.device)
-            embeddings = model.embed(**batch)
+            inputs = move_to_device(inputs, args.device)
+            embeddings = model.embed(**inputs)
             output = model.predictor(**embeddings)
             output["loss"].backward()
             optimizer.step()

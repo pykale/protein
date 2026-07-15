@@ -8,18 +8,15 @@ from pathlib import Path
 
 import torch
 from torch.nn import functional as F
-from torch.utils.data import DataLoader
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from kaleprotein.auto import (
-    AutoProteinCollator,
     AutoProteinConfig,
-    AutoProteinData,
+    AutoProteinDataLoader,
     AutoProteinModel,
-    AutoProteinPreprocessor,
 )
 from examples._utils import move_to_device
 from examples.drugban_dti._cli import (
@@ -50,27 +47,19 @@ def main(argv=None):
     if not args.root and not args.path:
         raise ValueError("Pass --root with a DrugBAN dataset tree or --path with a DTI CSV")
 
-    # 1. Load and preprocess training records.
-    data = AutoProteinData(
+    # 1. Load, preprocess, collate, and batch training records.
+    config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
+    loader = AutoProteinDataLoader(
         f"{args.dataset}/DTI",
+        config=config,
         root=args.root,
         path=args.path,
         split=args.split,
         subset=args.subset,
         limit=args.limit,
-    )
-    config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
-    preprocessor = AutoProteinPreprocessor.from_config(config)
-    processed = preprocessor.process(data)
-
-    # 2. Build data collation and loading independently from the model.
-    collator = AutoProteinCollator.from_config(config)
-    loader = DataLoader(
-        processed["samples"],
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
-        collate_fn=collator,
     )
     validation_loader = None
     if args.validation_subset:
@@ -78,37 +67,32 @@ def main(argv=None):
             raise ValueError(
                 "--validation-subset requires --root; a single --path has no sibling split"
             )
-        validation_data = AutoProteinData(
+        validation_loader = AutoProteinDataLoader(
             f"{args.dataset}/DTI",
+            config=config,
             root=args.root,
             split=args.split,
             subset=args.validation_subset,
             limit=args.limit,
-        )
-        validation_processed = preprocessor.process(validation_data)
-        validation_loader = DataLoader(
-            validation_processed["samples"],
             batch_size=args.batch_size,
             num_workers=args.num_workers,
-            collate_fn=collator,
         )
 
-    # 3. Build the pure model and optimizer.
+    # 2. Build the pure model and optimizer.
     device = resolve_device(args.device)
     model = AutoProteinModel("DTI/DrugBAN", pretrain=args.pretrain).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
 
-    # 4. Run explicit embedding, prediction, loss, and optimization steps.
+    # 3. Run explicit embedding, prediction, loss, and optimization steps.
     history = []
-    embedding_shapes = None
     for _ in range(args.epochs):
         model.train()
         total_loss = 0.0
         examples = 0
-        for batch in loader:
-            batch = move_to_device(batch, device)
+        for inputs in loader:
+            inputs = move_to_device(inputs, device)
             optimizer.zero_grad()
-            embeddings = model.embed(**batch)
+            embeddings = model.embed(**inputs)
             prediction = model.predictor(**embeddings)
             labels = prediction["labels"].float().view_as(prediction["logits"])
             loss = F.binary_cross_entropy_with_logits(prediction["logits"], labels)
@@ -117,12 +101,6 @@ def main(argv=None):
             count = labels.numel()
             total_loss += float(loss.detach()) * count
             examples += count
-            if embedding_shapes is None:
-                embedding_shapes = {
-                    name: list(value.shape)
-                    for name, value in embeddings.items()
-                    if name.endswith("_embedding")
-                }
         history.append(total_loss / max(examples, 1))
 
     result = {
@@ -131,15 +109,15 @@ def main(argv=None):
         "epochs": args.epochs,
     }
 
-    # 5. Evaluate the optional validation split from prediction dictionaries.
+    # 4. Evaluate the optional validation split from prediction dictionaries.
     if validation_loader is not None:
         probabilities = []
         labels = []
         model.eval()
         with torch.no_grad():
-            for batch in validation_loader:
-                batch = move_to_device(batch, device)
-                embeddings = model.embed(**batch)
+            for inputs in validation_loader:
+                inputs = move_to_device(inputs, device)
+                embeddings = model.embed(**inputs)
                 prediction = model.predictor(**embeddings)
                 probabilities.append(prediction["probabilities"].detach().cpu())
                 labels.append(prediction["labels"].detach().cpu())
@@ -148,13 +126,12 @@ def main(argv=None):
             labels=torch.cat(labels),
         )
 
-    # 6. Save the full model checkpoint.
+    # 5. Save the full model checkpoint.
     model.save_checkpoint(args.checkpoint, optimizer=optimizer, extra={"training": result})
     print_json(
         {
             "checkpoint": str(args.checkpoint),
             "training": result,
-            "embedding_shapes": embedding_shapes or {},
         }
     )
     return result

@@ -94,45 +94,45 @@ The normal user entry point is one complete model:
 
 ```python
 from kaleprotein.auto import (
-    AutoProteinCollator,
     AutoProteinConfig,
-    AutoProteinData,
+    AutoProteinDataLoader,
     AutoProteinInterpreter,
     AutoProteinModel,
-    AutoProteinPreprocessor,
 )
 
-# 1. Load reusable DTI data.
-data = AutoProteinData(
+# 1. Select the model card shared by data and model composition.
+config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
+
+# 2. Load, preprocess, collate, and batch reusable DTI data.
+loader = AutoProteinDataLoader(
     "BindingDB/DTI",
+    config=config,
     root="path/to/DrugBAN/datasets",
     split="random",
     subset="test",
+    batch_size=64,
 )
+inputs = next(iter(loader))
 
-# 2. Preprocess molecule and protein streams from the model card.
-config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
-preprocessor = AutoProteinPreprocessor.from_config(config)
-processed = preprocessor.process(data)
+# 3. Build the complete model and load requested weights.
+model = AutoProteinModel.from_config(config, checkpoint="drugban.pt")
 
-# 3. Collate data independently from the model.
-collator = AutoProteinCollator.from_config(config)
-batch = collator(**processed)
+# 4. Pass loader outputs directly into the registered embedders.
+embeddings = model.embed(**inputs)
 
-# 4. Build the complete model and load requested weights.
-model = AutoProteinModel("DTI/DrugBAN", checkpoint="drugban.pt")
-
-# 5. Embed with the model's registered modality encoders.
-embeddings = model.embed(**batch)
-
-# 6. Predict with the model's registered DTI task head.
+# 5. Pass named embeddings into the registered predictor.
 prediction = model.predictor(**embeddings)
 
-# 7. Evaluate or interpret when needed.
+# 6. Evaluate or interpret when needed.
 metrics = model.evaluate(**prediction)
 attention = model.extract_attention(**prediction)
 interpretation = AutoProteinInterpreter.from_config(config).explain(**attention)
 ```
+
+`AutoProteinDataLoader` exposes `.dataset`, `.preprocessor`, `.processed`,
+`.collator`, and `.loader`. It composes the data side from configuration but
+never creates or retains a model instance. Every yielded mapping is a valid
+`model.embed(**inputs)` keyword input.
 
 Every public stage returns a dictionary, and the next stage consumes named
 fields with `**`. DrugBAN's embedding contract includes
@@ -188,33 +188,31 @@ component is a generator:
 
 ```python
 from kaleprotein.auto import (
-    AutoProteinCollator,
     AutoProteinConfig,
-    AutoProteinData,
+    AutoProteinDataLoader,
     AutoProteinInterpreter,
     AutoProteinModel,
-    AutoProteinPreprocessor,
 )
 
-# 1. Load a PDB or processed CATH graph.
-data = AutoProteinData("CATH/InverseFolding", source="structure.pdb")
-
-# 2. Preprocess the structure condition.
+# 1. Select one shared model configuration.
 config = AutoProteinConfig.from_pretrained("InverseFolding/MapDiff")
-preprocessor = AutoProteinPreprocessor.from_config(config)
-processed = preprocessor.process(data)
 
-# 3. Collate data independently from the model.
-collator = AutoProteinCollator.from_config(config)
-batch = collator(**processed)
+# 2. Load and prepare a PDB or processed CATH graph.
+loader = AutoProteinDataLoader(
+    "CATH/InverseFolding",
+    config=config,
+    source="structure.pdb",
+    batch_size=1,
+)
+inputs = next(iter(loader))
 
-# 4. Load one complete model.
-model = AutoProteinModel("InverseFolding/MapDiff", pretrain=True)
+# 3. Load one complete model.
+model = AutoProteinModel.from_config(config, pretrain=True)
 
-# 5. Encode the condition.
-embeddings = model.embed(**batch)
+# 4. Encode structure conditions from the loader mapping.
+embeddings = model.embed(**inputs)
 
-# 6. Generate and evaluate sequences.
+# 5. Generate from the named embedding mapping.
 generation = model.predictor.generate(
     **embeddings,
     steps=100,
@@ -247,6 +245,8 @@ BindingDB, Human, and BioSNAP provide dataset-specific classes over one
 model-independent DTI CSV base class:
 
 ```python
+from kaleprotein.auto import AutoProteinData
+
 bindingdb = AutoProteinData("BindingDB/DTI", root="path/to/datasets")
 human_train = AutoProteinData(
     "Human/DTI", root="path/to/datasets", split="random", subset="train"

@@ -7,18 +7,15 @@ import sys
 from pathlib import Path
 
 import torch
-from torch.utils.data import DataLoader
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from kaleprotein.auto import (
-    AutoProteinCollator,
     AutoProteinConfig,
-    AutoProteinData,
+    AutoProteinDataLoader,
     AutoProteinModel,
-    AutoProteinPreprocessor,
 )
 from examples._utils import move_to_device
 from examples.drugban_dti._cli import (
@@ -46,33 +43,35 @@ def main(argv=None):
     if bool(args.smiles) != bool(args.sequence):
         raise ValueError("--smiles and --sequence must be provided together")
 
-    # 1. Load one pair or a reusable DTI dataset.
+    # 1. Select one pair or a reusable DTI dataset.
     if args.smiles:
-        data = [{"id": "input_0", "smiles": args.smiles, "sequence": args.sequence}]
+        data_id = "UserInput/DTI"
+        dataset = [
+            {"id": "input_0", "smiles": args.smiles, "sequence": args.sequence}
+        ]
+        dataset_kwargs = {"dataset": dataset}
     else:
         if not args.root and not args.path:
             raise ValueError(
                 "Pass --root with a DrugBAN dataset tree or --path with a DTI CSV"
             )
-        data = AutoProteinData(
-            f"{args.dataset}/DTI",
-            root=args.root,
-            path=args.path,
-            split=args.split,
-            subset=args.subset,
-            limit=args.limit,
-        )
+        data_id = f"{args.dataset}/DTI"
+        dataset_kwargs = {
+            "root": args.root,
+            "path": args.path,
+            "split": args.split,
+            "subset": args.subset,
+            "limit": args.limit,
+        }
 
-    # 2. Process and batch inputs independently from the model.
+    # 2. Load, preprocess, collate, and batch inputs.
     config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
-    preprocessor = AutoProteinPreprocessor.from_config(config)
-    processed = preprocessor.process(data)
-    collator = AutoProteinCollator.from_config(config)
-    loader = DataLoader(
-        processed["samples"],
+    loader = AutoProteinDataLoader(
+        data_id,
+        config=config,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
-        collate_fn=collator,
+        **dataset_kwargs,
     )
 
     # 3. Build the model and load requested weights through AutoProteinModel.
@@ -87,9 +86,9 @@ def main(argv=None):
     # 4. Embed and predict each prepared batch.
     predictions = []
     with torch.no_grad():
-        for batch in loader:
-            batch = move_to_device(batch, device)
-            embeddings = model.embed(**batch)
+        for inputs in loader:
+            inputs = move_to_device(inputs, device)
+            embeddings = model.embed(**inputs)
             prediction = model.predictor(**embeddings)
             for index, probability in enumerate(
                 prediction["probabilities"].detach().cpu()

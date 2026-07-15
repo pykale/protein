@@ -7,11 +7,9 @@ from pathlib import Path
 import torch
 
 from kaleprotein.auto import (
-    AutoProteinCollator,
     AutoProteinConfig,
-    AutoProteinData,
+    AutoProteinDataLoader,
     AutoProteinModel,
-    AutoProteinPreprocessor,
 )
 from examples._utils import move_to_device
 
@@ -26,6 +24,8 @@ def build_parser():
     parser.add_argument("--method", choices=("ddim", "ddpm"), default="ddim")
     parser.add_argument("--num-samples", type=int, default=1)
     parser.add_argument("--temperature", type=float, default=1.0)
+    parser.add_argument("--batch-size", type=int, default=8)
+    parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", type=Path)
@@ -36,17 +36,17 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     torch.manual_seed(args.seed)
 
-    # 1. Load, preprocess, and collate input structures.
-    data = AutoProteinData("CATH/InverseFolding", source=args.input)
+    # 1. Load, preprocess, collate, and batch input structures.
     config = AutoProteinConfig.from_pretrained("InverseFolding/MapDiff")
-    preprocessor = AutoProteinPreprocessor.from_config(config)
-    processed = preprocessor.process(data)
+    loader = AutoProteinDataLoader(
+        "CATH/InverseFolding",
+        config=config,
+        source=args.input,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+    )
 
-    # 2. Collate input structures independently from the model.
-    collator = AutoProteinCollator.from_config(config)
-    batch = move_to_device(collator(**processed), args.device)
-
-    # 3. Build the model and load requested weights through AutoProteinModel.
+    # 2. Build the model and load requested weights through AutoProteinModel.
     model = AutoProteinModel(
         "InverseFolding/MapDiff",
         pretrain=args.pretrained,
@@ -54,17 +54,26 @@ def main(argv=None):
     ).to(args.device)
     model.eval()
 
-    # 4. Encode the condition and run the registered generator.
+    # 3. Encode each condition batch and run the registered generator.
+    generated_batches = []
     with torch.no_grad():
-        embeddings = model.embed(**batch)
-        generation = model.predictor.generate(
-            **embeddings,
-            steps=args.steps,
-            method=args.method,
-            num_samples=args.num_samples,
-            temperature=args.temperature,
-        )
-    # 5. Serialize generated sequences and their denoising trajectory.
+        for inputs in loader:
+            inputs = move_to_device(inputs, args.device)
+            embeddings = model.embed(**inputs)
+            generated_batches.append(
+                model.predictor.generate(
+                    **embeddings,
+                    steps=args.steps,
+                    method=args.method,
+                    num_samples=args.num_samples,
+                    temperature=args.temperature,
+                )
+            )
+    if not generated_batches:
+        raise ValueError("Cannot generate from an empty inverse-folding dataset.")
+    generation = _merge_generations(generated_batches)
+
+    # 4. Serialize generated sequences and their denoising trajectories.
     serializable = {
         "sequences": generation["sequences"],
         "trajectory": generation["trajectory"],
@@ -75,6 +84,58 @@ def main(argv=None):
     else:
         print(text)
     return generation
+
+
+def _merge_generations(generations):
+    sequences = []
+    token_ids = []
+    logits = []
+    trajectories = []
+    references = []
+    sample_ids = []
+    for generation in generations:
+        sequences.extend(generation["sequences"])
+        references.extend(generation.get("reference_sequences", []))
+        sample_ids.extend(generation.get("sample_ids", []))
+        trajectories.extend(generation.get("trajectories", [generation["trajectory"]]))
+        if generation.get("token_ids") is not None:
+            token_ids.append(generation["token_ids"])
+        if generation.get("logits") is not None:
+            logits.append(generation["logits"])
+    return {
+        "sequences": sequences,
+        "token_ids": torch.cat(token_ids) if token_ids else None,
+        "logits": torch.cat(logits) if logits else None,
+        "trajectory": _merge_primary_trajectories(generations),
+        "trajectories": trajectories,
+        "sampling_method": generations[0].get("sampling_method"),
+        "reference_sequences": references,
+        "sample_ids": sample_ids,
+    }
+
+
+def _merge_primary_trajectories(generations):
+    trajectories = [generation["trajectory"] for generation in generations]
+    expected_steps = len(trajectories[0])
+    if any(len(trajectory) != expected_steps for trajectory in trajectories):
+        raise RuntimeError("MapDiff batches produced incompatible trajectory lengths.")
+    merged = []
+    for index in range(expected_steps):
+        states = [trajectory[index] for trajectory in trajectories]
+        timesteps = {int(state["timestep"]) for state in states}
+        if len(timesteps) != 1:
+            raise RuntimeError("MapDiff batches produced incompatible trajectory schedules.")
+        merged.append(
+            {
+                "timestep": timesteps.pop(),
+                "sequences": [
+                    sequence
+                    for state in states
+                    for sequence in state.get("sequences", [])
+                ],
+            }
+        )
+    return merged
 
 
 if __name__ == "__main__":

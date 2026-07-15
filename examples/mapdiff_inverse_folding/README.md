@@ -44,33 +44,31 @@ to the selected parameter tree.
 
 ```python
 from kaleprotein.auto import (
-    AutoProteinCollator,
     AutoProteinConfig,
-    AutoProteinData,
+    AutoProteinDataLoader,
     AutoProteinInterpreter,
     AutoProteinModel,
-    AutoProteinPreprocessor,
 )
 
-# 1. Load normalized inverse-folding records.
-data = AutoProteinData("CATH/InverseFolding", source="structure.pdb")
-
-# 2. Preprocess protein backbones.
+# 1. Load the model card shared by the data and model sides.
 config = AutoProteinConfig.from_pretrained("InverseFolding/MapDiff")
-preprocessor = AutoProteinPreprocessor.from_config(config)
-processed = preprocessor.process(data)
 
-# 3. Collate data independently from the model.
-collator = AutoProteinCollator.from_config(config)
-batch = collator(**processed)
+# 2. Load, preprocess, collate, and batch inverse-folding records.
+loader = AutoProteinDataLoader(
+    "CATH/InverseFolding",
+    config=config,
+    source="structure.pdb",
+    batch_size=1,
+)
+inputs = next(iter(loader))
 
-# 4. Build the complete model and resolve its pretrained checkpoint.
-model = AutoProteinModel("InverseFolding/MapDiff", pretrain=True)
+# 3. Build the complete model and resolve its pretrained checkpoint.
+model = AutoProteinModel.from_config(config, pretrain=True)
 
-# 5. Embed the structural condition.
-embeddings = model.embed(**batch)
+# 4. Encode structure conditions from the loader mapping.
+embeddings = model.embed(**inputs)
 
-# 6. Generate protein sequences.
+# 5. Generate from the named embedding mapping.
 generation = model.predictor.generate(
     **embeddings,
     steps=100,
@@ -78,7 +76,7 @@ generation = model.predictor.generate(
     num_samples=1,
 )
 
-# 7. Evaluate or interpret the generation mapping.
+# 6. Evaluate or interpret the generation mapping.
 metrics = model.evaluate(**generation)
 interpretation = AutoProteinInterpreter.from_config(config).explain(**generation)
 ```
@@ -86,6 +84,9 @@ interpretation = AutoProteinInterpreter.from_config(config).explain(**generation
 Generation returns sequences, logits, token ids, and a non-empty denoising
 trajectory. It also carries `reference_sequences` from the condition mapping,
 so generation metrics can consume the dictionary directly.
+
+The loader does not invoke MapDiff. It only guarantees that each yielded
+mapping can enter `model.embed(**inputs)` directly.
 
 ## Architectures
 

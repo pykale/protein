@@ -144,6 +144,8 @@ class MapDiffGenerator(nn.Module):
         sample_ids=None,
         **kwargs,
     ):
+        if "ipa_batch" in kwargs:
+            return self.prior_pretrain_loss(kwargs["ipa_batch"])
         if isinstance(conditioning, dict) and batch is None:
             payload = conditioning
             return self(**payload)
@@ -240,7 +242,9 @@ class MapDiffModel(nn.Module):
 
         return self.predictor.network
 
-    def embed(self, value=None, **batch):
+    def embed(self, value=None, ipa_batch=None, **batch):
+        if ipa_batch is not None:
+            return {"ipa_batch": ipa_batch}
         return self.embedder.embed(value, **batch)
 
     def forward(self, value=None, **inputs):
@@ -271,7 +275,14 @@ class MapDiffModel(nn.Module):
     def prior_pretrain_loss(self, ipa_batch):
         return self.predictor.prior_pretrain_loss(ipa_batch)
 
-    def evaluate(self, sequences, reference_sequences, logits=None, **generation):
+    def evaluate(
+        self,
+        sequences,
+        reference_sequences,
+        logits=None,
+        perplexity_reference_sequences=None,
+        **generation,
+    ):
         from kaleprotein.core.evaluation.tasks.inverse_folding.metrics import (
             Diversity,
             Perplexity,
@@ -284,7 +295,10 @@ class MapDiffModel(nn.Module):
             "diversity": Diversity()(output),
         }
         if logits is not None:
-            metrics["perplexity"] = Perplexity()(output, reference_sequences)
+            metrics["perplexity"] = Perplexity()(
+                output,
+                perplexity_reference_sequences or reference_sequences,
+            )
         return metrics
 
     def save_checkpoint(self, path):

@@ -13,12 +13,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from kaleprotein.auto import (
-    AutoProteinCollator,
     AutoProteinConfig,
-    AutoProteinData,
+    AutoProteinDataLoader,
     AutoProteinInterpreter,
     AutoProteinModel,
-    AutoProteinPreprocessor,
 )
 from examples._utils import move_to_device
 from examples.drugban_dti._cli import (
@@ -31,7 +29,7 @@ from examples.drugban_dti._cli import (
 
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
-    add_data_arguments(parser, batching=False)
+    add_data_arguments(parser)
     parser.add_argument("--checkpoint", type=Path)
     parser.add_argument("--pretrain", action="store_true")
     parser.add_argument("--threshold", type=float, default=0.5)
@@ -42,45 +40,61 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     seed_everything(args.seed)
 
-    # 1. Load normalized DTI records.
+    # 1. Load, preprocess, collate, and batch normalized DTI records.
     if not args.root and not args.path:
         raise ValueError("Pass --root with a DrugBAN dataset tree or --path with a DTI CSV")
-    data = AutoProteinData(
+    config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
+    loader = AutoProteinDataLoader(
         f"{args.dataset}/DTI",
+        config=config,
         root=args.root,
         path=args.path,
         split=args.split,
         subset=args.subset,
         limit=args.limit,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
     )
 
-    # 2. Preprocess SMILES and protein sequences.
-    config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
-    preprocessor = AutoProteinPreprocessor.from_config(config)
-    processed = preprocessor.process(data)
-
-    # 3. Collate data independently from the model.
-    collator = AutoProteinCollator.from_config(config)
+    # 2. Build the complete model and load requested weights.
     device = resolve_device(args.device)
-    batch = move_to_device(collator(**processed), device)
-
-    # 4. Build the complete model and load requested weights.
     model = AutoProteinModel(
         "DTI/DrugBAN",
         pretrain=args.pretrain,
         checkpoint=args.checkpoint,
     ).to(device)
+    interpreter = AutoProteinInterpreter.from_config(config)
     model.eval()
 
-    # 5. Embed both modalities and predict interactions.
+    # 3. Embed, predict, and collect named outputs for every batch.
+    probabilities = []
+    labels = []
+    interpreted_samples = []
+    interpreted_attention = []
     with torch.no_grad():
-        embeddings = model.embed(**batch)
-        prediction = model.predictor(**embeddings)
+        for inputs in loader:
+            inputs = move_to_device(inputs, device)
+            embeddings = model.embed(**inputs)
+            prediction = model.predictor(**embeddings)
+            probabilities.append(prediction["probabilities"].detach().cpu())
+            labels.append(prediction["labels"].detach().cpu())
+            attention = model.extract_attention(**prediction)
+            interpreted = interpreter.explain(**attention)
+            interpreted_samples.extend(interpreted["samples"])
+            interpreted_attention.extend(interpreted["attention"])
+    if not probabilities:
+        raise ValueError("Cannot evaluate an empty DTI dataset.")
 
-    # 6. Evaluate or expose attention from the prediction mapping.
-    metrics = model.evaluate(**prediction, threshold=args.threshold)
-    attention = model.extract_attention(**prediction)
-    interpretation = AutoProteinInterpreter.from_config(config).explain(**attention)
+    # 4. Evaluate or expose attention from the collected mappings.
+    metrics = model.evaluate(
+        probabilities=torch.cat(probabilities),
+        labels=torch.cat(labels),
+        threshold=args.threshold,
+    )
+    interpretation = {
+        "samples": interpreted_samples,
+        "attention": interpreted_attention,
+    }
     result = {"metrics": metrics, "interpretation": interpretation}
     print_json(result)
     return metrics

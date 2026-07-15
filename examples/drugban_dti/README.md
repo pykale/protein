@@ -37,41 +37,36 @@ component factories do not create or load another DrugBAN network.
 
 ```python
 from kaleprotein.auto import (
-    AutoProteinCollator,
     AutoProteinConfig,
-    AutoProteinData,
+    AutoProteinDataLoader,
     AutoProteinInterpreter,
     AutoProteinModel,
-    AutoProteinPreprocessor,
 )
 
-# 1. Load normalized DTI records.
-data = AutoProteinData(
+# 1. Load the model card shared by the data and model sides.
+config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
+
+# 2. Load, preprocess, collate, and batch normalized DTI records.
+loader = AutoProteinDataLoader(
     "BindingDB/DTI",
+    config=config,
     root="path/to/DrugBAN/datasets",
     split="random",
     subset="test",
+    batch_size=64,
 )
+inputs = next(iter(loader))
 
-# 2. Preprocess SMILES and protein sequences.
-config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
-preprocessor = AutoProteinPreprocessor.from_config(config)
-processed = preprocessor.process(data)
+# 3. Build the complete model and load weights when requested.
+model = AutoProteinModel.from_config(config, checkpoint="drugban.pt")
 
-# 3. Collate data independently from the model.
-collator = AutoProteinCollator.from_config(config)
-batch = collator(**processed)
+# 4. Pass loader outputs directly into DrugBAN's embedders.
+embeddings = model.embed(**inputs)
 
-# 4. Build the complete model and load weights when requested.
-model = AutoProteinModel("DTI/DrugBAN", checkpoint="drugban.pt")
-
-# 5. Embed both modalities.
-embeddings = model.embed(**batch)
-
-# 6. Predict interactions.
+# 5. Pass named embeddings into the BAN predictor.
 prediction = model.predictor(**embeddings)
 
-# 7. Evaluate or expose attention from the prediction mapping.
+# 6. Evaluate or expose attention from the prediction mapping.
 metrics = model.evaluate(**prediction)
 attention = model.extract_attention(**prediction)
 interpretation = AutoProteinInterpreter.from_config(config).explain(**attention)
@@ -82,6 +77,13 @@ returns flat keys such as `protein_embedding`, `protein_mask`,
 `molecule_embedding`, and `molecule_mask`; the BAN head declares those names
 in its Python signature. Replacing the head or inserting a user-defined stage
 only requires accepting and returning the desired named fields.
+
+The high-level loader exposes its composed `.dataset`, `.preprocessor`,
+`.processed`, `.collator`, and underlying `.loader`. Users can still construct
+or replace each low-level component directly for research workflows.
+
+The loader never invokes either model stage. It only guarantees that its output
+mapping satisfies the selected model card's `embed(**inputs)` contract.
 
 The shared preprocessing produces canonical 74-feature RDKit atoms. The independent
 DrugBAN collator adds the model-specific virtual-node bit before dense normalized graph convolution,

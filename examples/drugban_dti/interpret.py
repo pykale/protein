@@ -7,19 +7,16 @@ import sys
 from pathlib import Path
 
 import torch
-from torch.utils.data import DataLoader
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from kaleprotein.auto import (
-    AutoProteinCollator,
     AutoProteinConfig,
-    AutoProteinData,
+    AutoProteinDataLoader,
     AutoProteinInterpreter,
     AutoProteinModel,
-    AutoProteinPreprocessor,
 )
 from examples._utils import move_to_device
 from examples.drugban_dti._cli import (
@@ -45,29 +42,21 @@ def main(argv=None):
     if not args.root and not args.path:
         raise ValueError("Pass --root with a DrugBAN dataset tree or --path with a DTI CSV")
 
-    # 1. Load and process DTI records.
-    data = AutoProteinData(
+    # 1. Load, preprocess, collate, and batch DTI records.
+    config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
+    loader = AutoProteinDataLoader(
         f"{args.dataset}/DTI",
+        config=config,
         root=args.root,
         path=args.path,
         split=args.split,
         subset=args.subset,
         limit=args.limit,
-    )
-    config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
-    preprocessor = AutoProteinPreprocessor.from_config(config)
-    processed = preprocessor.process(data)
-
-    # 2. Build independent data collation and loading.
-    collator = AutoProteinCollator.from_config(config)
-    loader = DataLoader(
-        processed["samples"],
         batch_size=args.batch_size,
         num_workers=args.num_workers,
-        collate_fn=collator,
     )
 
-    # 3. Build the model and interpreter.
+    # 2. Build the model and interpreter.
     device = resolve_device(args.device)
     model = AutoProteinModel(
         "DTI/DrugBAN",
@@ -77,12 +66,12 @@ def main(argv=None):
     interpreter = AutoProteinInterpreter.from_config(config)
     model.eval()
 
-    # 4. Embed, predict, and interpret each prepared batch.
+    # 3. Embed, predict, and interpret each prepared batch.
     samples = []
     with torch.no_grad():
-        for batch in loader:
-            batch = move_to_device(batch, device)
-            embeddings = model.embed(**batch)
+        for inputs in loader:
+            inputs = move_to_device(inputs, device)
+            embeddings = model.embed(**inputs)
             prediction = model.predictor(**embeddings)
             attention = model.extract_attention(**prediction)
             samples.extend(interpreter.explain(**attention)["samples"])

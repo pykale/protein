@@ -4,13 +4,11 @@ import argparse
 from pathlib import Path
 
 import torch
-from torch.utils.data import DataLoader
 
 from kaleprotein.auto import (
     AutoProteinConfig,
-    AutoProteinData,
+    AutoProteinDataLoader,
     AutoProteinModel,
-    AutoProteinPreprocessor,
 )
 from examples._utils import move_to_device
 from examples.mapdiff_inverse_folding.collators import MapDiffIPACollator
@@ -33,18 +31,17 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     torch.manual_seed(args.seed)
 
-    # 1. Load and preprocess protein graphs.
-    data = AutoProteinData("CATH/InverseFolding", source=args.data)
+    # 1. Load, preprocess, collate, and batch protein structures.
     config = AutoProteinConfig.from_pretrained("InverseFolding/MapDiff")
-    preprocessor = AutoProteinPreprocessor.from_config(config)
-    processed = preprocessor.process(data)
     collator = MapDiffIPACollator(config=config)
-    loader = DataLoader(
-        processed["samples"],
+    loader = AutoProteinDataLoader(
+        "CATH/InverseFolding",
+        config=config,
+        source=args.data,
+        collator=collator,
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
-        collate_fn=collator,
     )
     # 2. Build the complete model and select its IPA prior parameters.
     model = AutoProteinModel("InverseFolding/MapDiff").to(args.device)
@@ -53,10 +50,11 @@ def main(argv=None):
 
     # 3. Optimize the masking-prior objective.
     for _ in range(args.epochs):
-        for batch in loader:
+        for inputs in loader:
             optimizer.zero_grad(set_to_none=True)
-            batch = move_to_device(batch, args.device)
-            output = model.predictor.prior_pretrain_loss(**batch)
+            inputs = move_to_device(inputs, args.device)
+            embeddings = model.embed(**inputs)
+            output = model.predictor(**embeddings)
             output["loss"].backward()
             optimizer.step()
     # 4. Save a complete checkpoint that AutoProteinModel can restore.
