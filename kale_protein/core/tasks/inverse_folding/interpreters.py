@@ -8,11 +8,13 @@ class DenoisingTrajectoryInterpreter:
     def __init__(self, config=None):
         self.config = config
 
-    def explain(self, predictor, data=None):
-        if isinstance(predictor, dict):
+    def explain(self, predictor=None, data=None, trajectory=None, **generation):
+        if trajectory is None and generation:
+            trajectory = generation.get("trajectory")
+        elif trajectory is None and isinstance(predictor, dict):
             trajectory = predictor.get("trajectory")
         else:
-            trajectory = getattr(predictor, "last_trajectory", None)
+            trajectory = trajectory or getattr(predictor, "last_trajectory", None)
             if trajectory is None and data is not None and hasattr(predictor, "generate"):
                 trajectory = predictor.generate(data).get("trajectory")
         if not trajectory:

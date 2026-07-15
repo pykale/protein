@@ -110,14 +110,14 @@ def test_new_card_composes_registered_components_without_auto_changes(tmp_path):
             self.marker = marker
 
         def embed(self, value):
-            return f"{self.marker}:{value}"
+            return {"embedded_value": f"{self.marker}:{value}"}
 
     class RelativePredictor:
         def __init__(self, config=None, suffix="predicted"):
             self.suffix = suffix
 
-        def __call__(self, value):
-            return f"{value}:{self.suffix}"
+        def __call__(self, embedded_value, **metadata):
+            return {"prediction": f"{embedded_value}:{self.suffix}", **metadata}
 
     AutoProteinEmbedder.register("architecture/relative_embedder", RelativeEmbedder)
     AutoProteinPredictor.register("architecture/relative_predictor", RelativePredictor)
@@ -132,12 +132,13 @@ def test_new_card_composes_registered_components_without_auto_changes(tmp_path):
         "        self.predictor = AutoProteinPredictor.from_config(config.get_predictor(), config=config)\n"
         "        self.pretrain = pretrain\n"
         "    def __call__(self, value):\n"
-        "        return self.predictor(self.embedder.embed(value))\n",
+        "        embeddings = self.embedder.embed(value)\n"
+        "        return self.predictor(**embeddings)\n",
         encoding="utf-8",
     )
     MODEL_CARD_REGISTRY.register("Architecture/Relative", config_path)
 
     model = AutoProteinModel("Architecture/Relative", pretrain=True)
 
-    assert model("payload") == "embedded:payload:predicted"
+    assert model("payload") == {"prediction": "embedded:payload:predicted"}
     assert model.pretrain is True

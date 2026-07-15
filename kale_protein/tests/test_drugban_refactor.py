@@ -179,9 +179,9 @@ def test_component_embeddings_equal_full_batch_and_raw_preprocessed(tiny_config,
     predictor.eval()
     batch = predictor.collator([_tensor_sample(0), _tensor_sample(1)])
 
-    full = predictor(batch)
-    embeddings = predictor.embed_components(batch)
-    component = predictor(embeddings["target"], embeddings["drug"])
+    full = predictor(**batch)
+    embeddings = predictor.embed_components(**batch)
+    component = predictor.predictor(**embeddings)
     assert torch.allclose(full["logits"], component["logits"], atol=1e-6)
 
     raw = [

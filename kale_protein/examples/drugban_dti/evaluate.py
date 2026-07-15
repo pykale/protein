@@ -17,9 +17,6 @@ from kale_protein.examples.drugban_dti._cli import (
     LazyPreprocessedDataset, add_data_arguments, load_dataset,
     load_requested_checkpoint, print_json, resolve_device, seed_everything,
 )
-from kale_protein.core.tasks.dti.metrics import compute_metrics
-
-
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     add_data_arguments(parser)
@@ -52,12 +49,16 @@ def main(argv=None):
     with torch.no_grad():
         for batch in loader:
             # 3. Embed protein and molecule streams, then predict interactions.
-            embeddings = model.embed(batch)
-            output = model.predictor(embeddings)
+            embeddings = model.embed(**batch)
+            output = model.predictor(**embeddings)
             probabilities.append(output["probabilities"].detach().cpu())
-            labels.append(batch["label"].detach().cpu())
+            labels.append(output["labels"].detach().cpu())
     # 4. Compute evaluation-only metrics.
-    metrics = compute_metrics(torch.cat(labels), torch.cat(probabilities), threshold=args.threshold)
+    prediction = {
+        "probabilities": torch.cat(probabilities),
+        "labels": torch.cat(labels),
+    }
+    metrics = model.evaluate(**prediction, threshold=args.threshold)
     print_json(metrics)
     return metrics
 

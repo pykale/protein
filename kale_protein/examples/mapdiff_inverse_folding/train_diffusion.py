@@ -7,7 +7,6 @@ import torch
 from torch.utils.data import DataLoader
 
 from kale_protein.auto import AutoProteinData, AutoProteinModel, AutoProteinPreprocessor
-from kale_protein.core.tasks.inverse_folding.collators import CollatorDiff
 
 
 def build_parser():
@@ -32,16 +31,16 @@ def main(argv=None):
     # 1. Load, preprocess, and collate CATH or PDB graphs.
     dataset = AutoProteinData("InverseFolding/CATH", source=args.data)
     preprocessor = AutoProteinPreprocessor("protein/structure")
-    processed_graphs = [preprocessor.featurize(record)["graph"] for record in dataset]
+    processed = [preprocessor.featurize(record) for record in dataset]
+    model = AutoProteinModel("InverseFolding/MapDiff", pretrain=False).to(args.device)
     loader = DataLoader(
-        processed_graphs,
+        processed,
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
-        collate_fn=CollatorDiff(),
+        collate_fn=model.collator,
     )
     # 2. Build the complete model and restore optional checkpoints.
-    model = AutoProteinModel("InverseFolding/MapDiff", pretrain=False).to(args.device)
     if args.checkpoint:
         model.load_compatible_checkpoint(args.checkpoint)
     if args.ipa_checkpoint:
@@ -56,7 +55,8 @@ def main(argv=None):
     for _ in range(args.epochs):
         for batch in loader:
             optimizer.zero_grad(set_to_none=True)
-            output = model(batch.to(args.device))
+            batch["batch"] = batch["batch"].to(args.device)
+            output = model(**batch)
             output["loss"].backward()
             optimizer.step()
     # 4. Save the full composed model.

@@ -71,7 +71,7 @@ def main(argv=None):
     first_batch = next(iter(loader))
 
     # 3. Exercise the explicit embedding stage before optimization.
-    embeddings = model.embed(first_batch)
+    embeddings = model.embed(**first_batch)
 
     # 4. Train, validate, and save the full model checkpoint.
     result = model.fit(
@@ -83,7 +83,9 @@ def main(argv=None):
         "checkpoint": str(args.checkpoint),
         "training": result,
         "embedding_shapes": {
-            name: list(component["embedding"].shape) for name, component in embeddings.items()
+            name: list(value.shape)
+            for name, value in embeddings.items()
+            if name.endswith("_embedding")
         },
     })
     return result

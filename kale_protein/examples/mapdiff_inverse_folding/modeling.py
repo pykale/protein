@@ -10,7 +10,7 @@ import torch
 from torch import nn
 
 from kale_protein.auto import AutoProteinEmbedder, AutoProteinPredictor
-from kale_protein.core.tasks.inverse_folding.collators import CollatorDiff
+from kale_protein.core.tasks.inverse_folding.collators import CollatorDiff, CollatorIPAPretrain
 from kale_protein.core.tasks.inverse_folding.datasets import (
     DiffusionBatch,
     GraphBatch,
@@ -73,6 +73,31 @@ def _upstream_kwargs(config):
     }
 
 
+class MapDiffCollator:
+    """Expose MapDiff's paired graph views through a named batch mapping."""
+
+    def __init__(self):
+        self._collator = CollatorDiff()
+
+    def __call__(self, samples):
+        graphs = []
+        for sample in samples:
+            structure = sample.get("structure", sample) if isinstance(sample, dict) else sample
+            graph = structure.get("graph", structure) if isinstance(structure, dict) else structure
+            graphs.append(coerce_protein_graph(graph))
+        return {"batch": self._collator(graphs)}
+
+
+class MapDiffIPACollator:
+    """Expose IPA pretraining inputs through the same mapping contract."""
+
+    def __init__(self, **kwargs):
+        self._collator = CollatorIPAPretrain(**kwargs)
+
+    def __call__(self, samples):
+        return {"ipa_batch": self._collator(samples)}
+
+
 @AutoProteinPredictor.register("inverse_folding/mapdiff_generator")
 class MapDiffGenerator(nn.Module):
     """MapDiff denoising generator; checkpoint loading remains model-owned."""
@@ -104,7 +129,8 @@ class MapDiffGenerator(nn.Module):
         self.architecture = architecture
 
     @staticmethod
-    def as_batch(value):
+    def as_batch(value=None, batch=None):
+        value = batch if batch is not None else value
         if isinstance(value, DiffusionBatch):
             return value
         if isinstance(value, GraphBatch):
@@ -115,8 +141,8 @@ class MapDiffGenerator(nn.Module):
         graph = structure["graph"] if isinstance(structure, dict) and "graph" in structure else coerce_protein_graph(structure)
         return CollatorDiff()([graph])
 
-    def embed(self, value):
-        batch = self.as_batch(value)
+    def embed(self, value=None, *, batch=None, **kwargs):
+        batch = self.as_batch(value, batch=batch)
         if self.architecture == "upstream-mapdiff-v1":
             conditioning = self.network.feature_adapter(batch)
             hidden = self.network.embed(batch, prepared=conditioning)
@@ -131,26 +157,54 @@ class MapDiffGenerator(nn.Module):
                 conditioning=conditioning,
             )
         return {
-            "hidden": hidden,
+            "structure_embedding": hidden,
             "conditioning": conditioning,
             "coordinates": coordinates,
             "graph": batch.graph,
             "batch": batch,
+            "reference_sequences": list(batch.graph.sequences),
+            "sample_ids": list(batch.graph.identifiers),
         }
 
-    def forward(self, conditioning):
-        batch = self.as_batch(conditioning)
-        encoded = conditioning.get("conditioning") if isinstance(conditioning, dict) else None
+    def forward(
+        self,
+        conditioning=None,
+        batch=None,
+        reference_sequences=None,
+        sample_ids=None,
+        **kwargs,
+    ):
+        if isinstance(conditioning, dict) and batch is None:
+            payload = conditioning
+            return self(**payload)
+        batch = self.as_batch(batch)
+        encoded = conditioning
         if self.architecture == "upstream-mapdiff-v1":
-            return self.network(batch, prepared=encoded)
-        return self.network(batch, conditioning=encoded)
+            output = self.network(batch, prepared=encoded)
+        else:
+            output = self.network(batch, conditioning=encoded)
+        return _attach_generation_metadata(output, reference_sequences, sample_ids)
 
-    def generate(self, conditioning, sampling_config=None, **kwargs):
+    def generate(
+        self,
+        conditioning=None,
+        batch=None,
+        sampling_config=None,
+        reference_sequences=None,
+        sample_ids=None,
+        **kwargs,
+    ):
+        if isinstance(conditioning, dict) and batch is None:
+            payload = dict(conditioning)
+            payload.update(kwargs)
+            return self.generate(sampling_config=sampling_config, **payload)
         sampling = dict(self.config.get("sampling", {}))
         sampling.update(sampling_config or {})
-        sampling.update(kwargs)
-        batch = self.as_batch(conditioning)
-        encoded = conditioning.get("conditioning") if isinstance(conditioning, dict) else None
+        sampling.update({key: value for key, value in kwargs.items() if key in {
+            "steps", "method", "temperature", "num_samples"
+        }})
+        batch = self.as_batch(batch)
+        encoded = conditioning
         arguments = {
             "steps": sampling.get("steps", 50),
             "method": sampling.get("method", "ddim"),
@@ -162,7 +216,7 @@ class MapDiffGenerator(nn.Module):
         else:
             output = self.network.sample(batch, conditioning=encoded, **arguments)
         self.last_trajectory = output["trajectory"]
-        return output
+        return _attach_generation_metadata(output, reference_sequences, sample_ids)
 
     def prior_pretrain_loss(self, ipa_batch):
         return self.network.prior_pretrain_loss(ipa_batch)
@@ -184,8 +238,8 @@ class MapDiffConditionEmbedder(nn.Module):
             raise RuntimeError("The MapDiff generator backing this embedder no longer exists.")
         return predictor
 
-    def embed(self, value):
-        return self.predictor.embed(value)
+    def embed(self, value=None, **kwargs):
+        return self.predictor.embed(value, **kwargs)
 
     forward = embed
 
@@ -204,6 +258,8 @@ class MapDiffModel(nn.Module):
             "architecture", model_architecture
         )
         architecture = pretrained_architecture if pretrain else model_architecture
+        self.collator = MapDiffCollator()
+        self.ipa_collator = MapDiffIPACollator()
         self.predictor = AutoProteinPredictor.from_config(
             config.get_predictor(), config=config, architecture=architecture
         )
@@ -225,20 +281,52 @@ class MapDiffModel(nn.Module):
 
         return self.predictor.network
 
-    def embed(self, value):
-        return self.embedder.embed(value)
+    def embed(self, value=None, **batch):
+        return self.embedder.embed(value, **batch)
 
-    def forward(self, value):
-        return self.predictor(self.embed(value))
+    def forward(self, value=None, **inputs):
+        if _is_conditioning(value):
+            return self.predictor(**value)
+        if _is_conditioning(inputs):
+            return self.predictor(**inputs)
+        return self.predictor(**self.embed(value, **inputs))
 
-    def generate(self, value, sampling_config=None, **kwargs):
-        conditioning = value if _is_conditioning(value) else self.embed(value)
-        return self.predictor.generate(conditioning, sampling_config=sampling_config, **kwargs)
+    def generate(self, value=None, sampling_config=None, **kwargs):
+        if _is_conditioning(value):
+            embeddings = value
+        elif _is_conditioning(kwargs):
+            embeddings = kwargs
+            kwargs = {}
+        else:
+            embeddings = self.embed(value, **kwargs)
+            kwargs = {
+                key: item for key, item in kwargs.items()
+                if key in {"steps", "method", "temperature", "num_samples"}
+            }
+        return self.predictor.generate(
+            **embeddings, sampling_config=sampling_config, **kwargs
+        )
 
     sample = generate
 
     def prior_pretrain_loss(self, ipa_batch):
         return self.predictor.prior_pretrain_loss(ipa_batch)
+
+    def evaluate(self, sequences, reference_sequences, logits=None, **generation):
+        from kale_protein.core.tasks.inverse_folding.metrics import (
+            Diversity,
+            Perplexity,
+            SequenceRecovery,
+        )
+
+        output = {"sequences": sequences, "logits": logits, **generation}
+        metrics = {
+            "sequence_recovery": SequenceRecovery()(output, reference_sequences),
+            "diversity": Diversity()(output),
+        }
+        if logits is not None:
+            metrics["perplexity"] = Perplexity()(output, reference_sequences)
+        return metrics
 
     def save_checkpoint(self, path):
         path = Path(path)
@@ -302,8 +390,19 @@ def _is_conditioning(value):
     return isinstance(value, dict) and "conditioning" in value and "batch" in value
 
 
+def _attach_generation_metadata(output, reference_sequences, sample_ids):
+    output = dict(output)
+    if reference_sequences is not None:
+        output["reference_sequences"] = reference_sequences
+    if sample_ids is not None:
+        output["sample_ids"] = sample_ids
+    return output
+
+
 __all__ = [
     "MapDiffConditionEmbedder",
+    "MapDiffCollator",
+    "MapDiffIPACollator",
     "MapDiffGenerator",
     "MapDiffModel",
 ]

@@ -208,24 +208,50 @@ class DrugBANModel(nn.Module):
             self.weight_path = resolve_pretrained_weight(config)
             self.load_checkpoint(self.weight_path)
 
-    def embed(self, data):
+    def embed(self, data=None, *, drug=None, target=None, label=None, ids=None, **batch_fields):
+        """Return a flat mapping that can be expanded into the task predictor."""
+
+        if data is None:
+            data = {"drug": drug, "target": target, **batch_fields}
+            if label is not None:
+                data["label"] = label
+            if ids is not None:
+                data["ids"] = ids
         batch = _move_to_device(_prepare_batch(data, self.collator), _device_of(self))
-        return {
-            "target": self.protein_embedder.embed(batch["target"]),
-            "drug": self.molecule_embedder.embed(batch["drug"]),
+        protein = self.protein_embedder.embed(batch["target"])
+        molecule = self.molecule_embedder.embed(batch["drug"])
+        embeddings = {
+            "protein_embedding": protein["embedding"],
+            "protein_mask": protein.get("mask"),
+            "protein_sequences": protein.get("sequences"),
+            "molecule_embedding": molecule["embedding"],
+            "molecule_mask": molecule.get("mask"),
+            "molecule_smiles": molecule.get("smiles"),
+            "molecule_atom_symbols": molecule.get("atom_symbols"),
         }
+        if "label" in batch:
+            embeddings["labels"] = batch["label"]
+        if "ids" in batch:
+            embeddings["sample_ids"] = batch["ids"]
+        return embeddings
 
     embed_components = embed
 
-    def forward(self, batch_or_protein_embedding, molecule_embedding=None):
+    def forward(self, batch_or_protein_embedding=None, molecule_embedding=None, **inputs):
         if molecule_embedding is not None:
-            return self.predictor(batch_or_protein_embedding, molecule_embedding)
+            return self.predictor(
+                protein_embedding=batch_or_protein_embedding,
+                molecule_embedding=molecule_embedding,
+                **inputs,
+            )
         if _is_embedding_pair(batch_or_protein_embedding):
-            return self.predictor(batch_or_protein_embedding)
-        embeddings = self.embed(batch_or_protein_embedding)
-        output = self.predictor(embeddings)
-        output["protein_embedding"] = embeddings["target"]["embedding"]
-        output["drug_embedding"] = embeddings["drug"]["embedding"]
+            return self.predictor(**batch_or_protein_embedding)
+        if _is_embedding_pair(inputs):
+            return self.predictor(**inputs)
+        embeddings = self.embed(batch_or_protein_embedding, **inputs)
+        output = self.predictor(**embeddings)
+        output["protein_embedding"] = embeddings["protein_embedding"]
+        output["molecule_embedding"] = embeddings["molecule_embedding"]
         return output
 
     def make_dataloader(self, data, batch_size=None, shuffle=False, num_workers=0):
@@ -277,7 +303,7 @@ class DrugBANModel(nn.Module):
                     raise ValueError("DrugBAN fit() requires a label for every training sample.")
                 batch = _move_to_device(batch, _device_of(self))
                 optimizer.zero_grad()
-                output = self(batch)
+                output = self(**batch)
                 labels = batch["label"].float().view_as(output["logits"])
                 loss = F.binary_cross_entropy_with_logits(output["logits"], labels)
                 loss.backward()
@@ -291,20 +317,40 @@ class DrugBANModel(nn.Module):
             result["validation"] = self.evaluate(valid_data, batch_size=batch_size)
         return result
 
-    def evaluate(self, data, batch_size=None, threshold=0.5):
+    def evaluate(
+        self,
+        data=None,
+        batch_size=None,
+        threshold=0.5,
+        probabilities=None,
+        labels=None,
+        **prediction,
+    ):
         from kale_protein.core.tasks.dti.metrics import compute_metrics
 
-        output = self.predict(data, batch_size=batch_size)
-        labels = _labels_from_data(data, self.collator, batch_size)
-        return compute_metrics(labels, output["probabilities"], threshold=threshold)
+        if probabilities is None:
+            if data is None:
+                raise ValueError("DrugBAN evaluation requires prediction fields or input data.")
+            output = self.predict(data, batch_size=batch_size)
+            probabilities = output["probabilities"]
+            labels = _labels_from_data(data, self.collator, batch_size)
+        elif labels is None:
+            labels = prediction.get("label")
+        if labels is None:
+            raise ValueError("DrugBAN evaluation requires labels.")
+        return compute_metrics(labels, probabilities, threshold=threshold)
 
-    def extract_attention(self, batch_or_dataset, batch_size=None):
-        output = self.predict(batch_or_dataset, batch_size=batch_size)
+    def extract_attention(self, batch_or_dataset=None, batch_size=None, **prediction):
+        output = prediction
+        if "attention" not in output:
+            if batch_or_dataset is None:
+                raise ValueError("Attention extraction requires prediction fields or input data.")
+            output = self.predict(batch_or_dataset, batch_size=batch_size)
         return {
             key: output.get(key)
             for key in (
-                "attention", "drug_mask", "protein_mask", "atom_symbols",
-                "sequences", "smiles",
+                "attention", "molecule_mask", "protein_mask", "molecule_atom_symbols",
+                "protein_sequences", "molecule_smiles", "sample_ids",
             )
         }
 
@@ -349,10 +395,8 @@ def _prepare_batch(data, collator):
 def _is_embedding_pair(value):
     return (
         isinstance(value, dict)
-        and isinstance(value.get("target"), dict)
-        and "embedding" in value["target"]
-        and isinstance(value.get("drug"), dict)
-        and "embedding" in value["drug"]
+        and "protein_embedding" in value
+        and "molecule_embedding" in value
     )
 
 

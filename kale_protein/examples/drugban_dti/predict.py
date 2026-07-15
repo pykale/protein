@@ -57,12 +57,12 @@ def main(argv=None):
     with torch.no_grad():
         for batch in loader:
             # 4. Embed both modalities and predict probabilities.
-            embeddings = model.embed(batch)
-            output = model.predictor(embeddings)
+            embeddings = model.embed(**batch)
+            output = model.predictor(**embeddings)
             for index, probability in enumerate(output["probabilities"].detach().cpu()):
                 predictions.append({
-                    "id": batch["ids"][index],
-                    "smiles": batch["drug"]["smiles"][index],
+                    "id": output["sample_ids"][index],
+                    "smiles": output["molecule_smiles"][index],
                     "probability": float(probability),
                 })
     print_json(predictions)

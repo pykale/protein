@@ -67,7 +67,7 @@ class MultiStreamPreprocessor:
         return output
 
     def transform_dataset(self, dataset):
-        return [self.transform_sample(sample) for sample in dataset]
+        return {"samples": [self.transform_sample(sample) for sample in dataset]}
 
 
 __all__ = ["AutoMoleculePreprocessor", "AutoProteinPreprocessor"]

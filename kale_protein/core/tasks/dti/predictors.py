@@ -154,29 +154,49 @@ class BANInteractionPredictor(nn.Module):
             binary=binary_dim,
         )
 
-    def forward(self, protein_embedding, molecule_embedding=None):
-        if molecule_embedding is None:
-            if not isinstance(protein_embedding, dict):
-                raise TypeError("dti/ban expects protein and molecule embeddings.")
-            molecule_embedding = protein_embedding["drug"]
-            protein_embedding = protein_embedding["target"]
-        protein, protein_mask = _embedding_parts(protein_embedding)
-        molecule, molecule_mask = _embedding_parts(molecule_embedding)
+    def forward(
+        self,
+        protein_embedding,
+        molecule_embedding=None,
+        protein_mask=None,
+        molecule_mask=None,
+        protein_sequences=None,
+        molecule_smiles=None,
+        molecule_atom_symbols=None,
+        labels=None,
+        sample_ids=None,
+        **kwargs,
+    ):
+        if molecule_embedding is None and isinstance(protein_embedding, dict):
+            payload = protein_embedding
+            if "protein_embedding" in payload:
+                return self(**payload)
+            molecule_embedding = payload["drug"]
+            protein_embedding = payload["target"]
+        protein, inferred_protein_mask = _embedding_parts(protein_embedding)
+        molecule, inferred_molecule_mask = _embedding_parts(molecule_embedding)
+        protein_mask = inferred_protein_mask if protein_mask is None else protein_mask.bool()
+        molecule_mask = inferred_molecule_mask if molecule_mask is None else molecule_mask.bool()
         fused, attention = self.ban(
             molecule, protein, molecule_mask, protein_mask
         )
         logits = self.decoder(fused).squeeze(-1)
-        return {
+        output = {
             "logits": logits,
             "probabilities": torch.sigmoid(logits),
             "attention": attention,
-            "drug_mask": molecule_mask,
+            "molecule_mask": molecule_mask,
             "protein_mask": protein_mask,
             "fused_embedding": fused,
-            "atom_symbols": molecule_embedding.get("atom_symbols") if isinstance(molecule_embedding, dict) else None,
-            "smiles": molecule_embedding.get("smiles") if isinstance(molecule_embedding, dict) else None,
-            "sequences": protein_embedding.get("sequences") if isinstance(protein_embedding, dict) else None,
+            "molecule_atom_symbols": molecule_atom_symbols,
+            "molecule_smiles": molecule_smiles,
+            "protein_sequences": protein_sequences,
         }
+        if labels is not None:
+            output["labels"] = labels
+        if sample_ids is not None:
+            output["sample_ids"] = sample_ids
+        return output
 
 
 __all__ = ["BANInteractionPredictor", "BANLayer", "MLPDecoder"]
