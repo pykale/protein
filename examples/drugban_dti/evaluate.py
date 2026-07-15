@@ -12,11 +12,22 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from kaleprotein.auto import AutoProteinConfig, AutoProteinModel, AutoProteinPreprocessor
-from examples.drugban_dti._cli import (
-    LazyPreprocessedDataset, add_data_arguments, load_dataset,
-    load_requested_checkpoint, print_json, resolve_device, seed_everything,
+from kaleprotein.auto import (
+    AutoProteinConfig,
+    AutoProteinData,
+    AutoProteinModel,
+    AutoProteinPreprocessor,
 )
+from examples.drugban_dti._cli import (
+    LazyPreprocessedDataset,
+    add_data_arguments,
+    load_requested_checkpoint,
+    print_json,
+    resolve_device,
+    seed_everything,
+)
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     add_data_arguments(parser)
@@ -31,7 +42,16 @@ def main(argv=None):
     seed_everything(args.seed)
 
     # 1. Load and preprocess the held-out split.
-    dataset = load_dataset(args)
+    if not args.root and not args.path:
+        raise ValueError("Pass --root with a DrugBAN dataset tree or --path with a DTI CSV")
+    dataset = AutoProteinData(
+        f"{args.dataset}/DTI",
+        root=args.root,
+        path=args.path,
+        split=args.split,
+        subset=args.subset,
+        limit=args.limit,
+    )
     config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
     preprocessor = AutoProteinPreprocessor.from_config(config)
     processed = LazyPreprocessedDataset(dataset, preprocessor)

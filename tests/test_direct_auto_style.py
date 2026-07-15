@@ -1,3 +1,4 @@
+import ast
 import builtins
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -25,6 +26,20 @@ def test_model_ids_are_card_driven_not_auto_hardcoded():
 
     config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
     assert config["auto_map"]["AutoProteinModel"] == "modeling.DrugBANModel"
+
+
+def test_drugban_evaluate_loads_data_through_auto_api():
+    source = (
+        Path(__file__).resolve().parents[1] / "examples" / "drugban_dti" / "evaluate.py"
+    ).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    assert any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "AutoProteinData"
+        for node in ast.walk(tree)
+    )
 
 
 def test_model_cards_do_not_require_pyyaml(monkeypatch):
