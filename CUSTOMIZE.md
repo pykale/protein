@@ -6,22 +6,23 @@ directory.
 
 ## Add Reusable Data
 
-Task datasets belong in `core/tasks/<task>/datasets.py` and register a stable
-id:
+Built-in dataset adapters live directly in `core/data/<dataset>.py` and register
+a stable `Dataset/Task` id. Fundamental readers such as FASTA, tabular, PDB, and
+mmCIF parsing belong in `core/data/utils/`:
 
 ```python
-from kale_protein.core.registry import DATASET_REGISTRY
+from kaleprotein.core.registry import DATASET_REGISTRY
 
 
-@DATASET_REGISTRY.register("DTI/MyDataset")
-def load_my_dataset(path, split="train"):
-    return MyDataset(path=path, split=split)
+@DATASET_REGISTRY.register("MyDataset/DTI")
+class MyDataset(DTIDataset):
+    ...
 ```
 
 Every compatible model can then use:
 
 ```python
-data = AutoProteinData("DTI/MyDataset", path="data.csv", split="test")
+data = AutoProteinData("MyDataset/DTI", path="data.csv", split="test")
 ```
 
 Dataset loaders should normalize task fields and preserve provenance. They
@@ -29,10 +30,11 @@ must not import a concrete model.
 
 ## Add A Reusable Preprocessor
 
-Modality processors belong in `core/modalities/<modality>/processors.py`:
+Reusable transformations belong in `core/preprocessing/`, outside the loading
+and parsing layer:
 
 ```python
-from kale_protein.core.registry import PREPROCESSOR_REGISTRY
+from kaleprotein.core.registry import PREPROCESSOR_REGISTRY
 
 
 @PREPROCESSOR_REGISTRY.register(
@@ -56,12 +58,13 @@ class MyTokenizer:
 ## Add Reusable Model Components
 
 Reusable modality encoders register as embedders. Reusable task fusion and
-heads register as predictors:
+heads register as predictors. Put them in `core/modeling/modalities/` and
+`core/modeling/tasks/`, respectively:
 
 ```python
 from torch import nn
 
-from kale_protein.auto import AutoProteinEmbedder, AutoProteinPredictor
+from kaleprotein.auto import AutoProteinEmbedder, AutoProteinPredictor
 
 
 @AutoProteinEmbedder.register("sequence/my_encoder")
@@ -101,7 +104,7 @@ named model. Model-specific layers can register from the example's
 Use the same simple layout for every model:
 
 ```text
-kale_protein/examples/my_model/
+examples/my_model/
   __init__.py
   config.yaml
   configuration.py
@@ -154,7 +157,7 @@ components:
 ### Configuration Class
 
 ```python
-from kale_protein.auto import AutoProteinConfig
+from kaleprotein.auto import AutoProteinConfig
 
 
 class MyModelConfig(AutoProteinConfig):
@@ -168,8 +171,8 @@ The full model is the composition root and sole full-checkpoint owner:
 ```python
 from torch import nn
 
-from kale_protein.auto import AutoProteinEmbedder, AutoProteinPredictor
-from kale_protein.core.weights import load_checkpoint_state_dict, resolve_pretrained_weight
+from kaleprotein.auto import AutoProteinEmbedder, AutoProteinPredictor
+from kaleprotein.core.weights import load_checkpoint_state_dict, resolve_pretrained_weight
 
 
 class MyModel(nn.Module):
@@ -211,7 +214,7 @@ Bundled cards are discovered from `config.yaml`. Register an external card
 without editing Auto:
 
 ```python
-from kale_protein.core.registry import register_model_card
+from kaleprotein.core.registry import register_model_card
 
 register_model_card("path/to/my_model/config.yaml")
 model = AutoProteinModel("MyTask/MyModel")
@@ -241,6 +244,6 @@ script import safety.
 
 ```bash
 python -m pytest -q
-python -m compileall -q kale_protein
+python -m compileall -q kaleprotein
 python -m build
 ```

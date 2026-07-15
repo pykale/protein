@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "kale-protein"
+name = "kaleprotein"
 version = "0.1.0"
 description = "Registry-driven protein and small-molecule workflows"
 readme = "README.md"
@@ -31,22 +31,13 @@ include-package-data = false
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 
 [tool.setuptools.packages.find]
-include = ["kale_protein*"]
-exclude = ["kale_protein.tests*"]
+include = ["kaleprotein*"]
 namespaces = true
 
 [tool.setuptools.package-data]
-kale_protein = [
+kaleprotein = [
     "**/*.json",
     "**/*.map",
     "**/*.yaml",
     "**/*.yml",
-]
-
-[tool.setuptools.exclude-package-data]
-kale_protein = [
-    "**/data/*",
-    "**/data/**/*",
-    "**/weights/*",
-    "**/weights/**/*",
 ]

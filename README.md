@@ -5,8 +5,14 @@ models. Users load one complete model by id; the model card decides which
 reusable embedders and task predictor or generator it contains.
 
 ```python
+from kaleprotein.auto import AutoProteinModel
+
 model = AutoProteinModel("DTI/DrugBAN", pretrain=False)
 ```
+
+Named example models are discovered automatically when working from this source
+repository. An installed wheel contains the reusable library only; model authors
+can register their own local or downloaded model cards without changing Auto.
 
 The examples expose a real pipeline rather than a workflow wrapper:
 
@@ -20,7 +26,7 @@ upstream checkout at runtime.
 ## Structure
 
 ```text
-kale_protein/
+kaleprotein/
   auto/                         # generic selection and construction only
     configuration.py
     data.py
@@ -29,19 +35,28 @@ kale_protein/
     evaluation.py
     interpretation.py
   core/                         # reusable building blocks
+    data/
+      utils/                    # FASTA, CSV/TSV, PDB, and mmCIF parsing
+      base.py                   # shared dataset contracts
+      schemas.py                # stable sample and structure records
+      bindingdb.py              # one module per built-in dataset
+      biosnap.py
+      human.py
+      cath.py
+    preprocessing/              # reusable transforms, separate from loading
+    modeling/
+      modalities/               # reusable encoders and neural layers
+      tasks/                    # fusion, heads, predictors, generators
+    evaluation/
+      tasks/                    # metrics and interpretation
     registry/
     config/
     weights/
-    modalities/
-      sequence/
-      molecule/
-      structure/
-    tasks/
-      dti/
-      inverse_folding/
-  examples/                     # complete named model implementations
-    drugban_dti/
-    mapdiff_inverse_folding/
+examples/                       # complete named model implementations
+  drugban_dti/
+  mapdiff_inverse_folding/
+tests/                          # repository tests, not installed
+docs/
 ```
 
 `auto/` contains no DrugBAN or MapDiff branch. `core/` contains only reusable
@@ -57,16 +72,28 @@ python -m pip install -e ".[mapdiff]"
 python -m pip install -e ".[drugban,mapdiff,dev]"
 ```
 
-The base package can load model cards and DTI CSV data without importing
-PyTorch. DrugBAN raw-SMILES processing requires RDKit; MapDiff requires
+Setuptools packages only `kaleprotein*`. Root-level `examples/`, `tests/`, and
+`docs/` are repository resources and are not installed into site-packages. The
+base package can load externally registered model cards and DTI CSV data without
+importing PyTorch. DrugBAN raw-SMILES processing requires RDKit; MapDiff requires
 PyTorch.
+
+When running from a source checkout, `import kaleprotein` discovers model cards
+under the adjacent `examples/` directory. After installing a wheel, register a
+model card directory explicitly before using a named example model:
+
+```python
+from kaleprotein.core.registry import discover_model_cards
+
+discover_model_cards("path/to/model_cards")
+```
 
 ## DrugBAN
 
 The normal user entry point is one complete model:
 
 ```python
-from kale_protein.auto import (
+from kaleprotein.auto import (
     AutoProteinConfig,
     AutoProteinData,
     AutoProteinInterpreter,
@@ -76,7 +103,7 @@ from kale_protein.auto import (
 
 # 1. Load reusable DTI data.
 data = AutoProteinData(
-    "DTI/BindingDB",
+    "BindingDB/DTI",
     root="path/to/DrugBAN/datasets",
     split="random",
     subset="test",
@@ -133,22 +160,22 @@ second full DrugBAN model and do not own full-model checkpoints.
 Run the complete workflows:
 
 ```bash
-python -m kale_protein.examples.drugban_dti.train \
+python -m examples.drugban_dti.train \
   --dataset BindingDB --root /data/drugban --split random --subset train \
   --validation-subset val --checkpoint drugban.pt
 
-python -m kale_protein.examples.drugban_dti.evaluate \
+python -m examples.drugban_dti.evaluate \
   --dataset BindingDB --root /data/drugban --split random --subset test \
   --checkpoint drugban.pt
 
-python -m kale_protein.examples.drugban_dti.predict \
+python -m examples.drugban_dti.predict \
   --smiles "CCO" --sequence "MKT..." --checkpoint drugban.pt
 
-python -m kale_protein.examples.drugban_dti.interpret \
+python -m examples.drugban_dti.interpret \
   --dataset BioSNAP --path /data/biosnap/full.csv --checkpoint drugban.pt
 ```
 
-See the [DrugBAN example README](kale_protein/examples/drugban_dti/README.md).
+See the [DrugBAN example README](examples/drugban_dti/README.md).
 
 ## MapDiff
 
@@ -156,7 +183,7 @@ Generative models use the same complete-model entry point. Their predictor
 component is a generator:
 
 ```python
-from kale_protein.auto import (
+from kaleprotein.auto import (
     AutoProteinData,
     AutoProteinInterpreter,
     AutoProteinModel,
@@ -164,7 +191,7 @@ from kale_protein.auto import (
 )
 
 # 1. Load a PDB or processed CATH graph.
-record = AutoProteinData("InverseFolding/CATH", source="structure.pdb")[0]
+record = AutoProteinData("CATH/InverseFolding", source="structure.pdb")[0]
 
 # 2. Preprocess the structure condition.
 preprocessor = AutoProteinPreprocessor("protein/structure")
@@ -197,29 +224,30 @@ card `weights/` directory, and downloads the configured MapDiff v1.0.1 weight
 only when absent. The complete model loads that checkpoint exactly once.
 
 ```bash
-python -m kale_protein.examples.mapdiff_inverse_folding.pretrain_ipa \
+python -m examples.mapdiff_inverse_folding.pretrain_ipa \
   /data/cath/train --output ipa.pt
-python -m kale_protein.examples.mapdiff_inverse_folding.train_diffusion \
+python -m examples.mapdiff_inverse_folding.train_diffusion \
   /data/cath/train --ipa-checkpoint ipa.pt --output mapdiff.pt
-python -m kale_protein.examples.mapdiff_inverse_folding.evaluate \
+python -m examples.mapdiff_inverse_folding.evaluate \
   /data/cath/test --pretrained
-python -m kale_protein.examples.mapdiff_inverse_folding.generate \
+python -m examples.mapdiff_inverse_folding.generate \
   structure.pdb --pretrained --steps 100
 ```
 
-See the [MapDiff example README](kale_protein/examples/mapdiff_inverse_folding/README.md).
+See the [MapDiff example README](examples/mapdiff_inverse_folding/README.md).
 
 ## Reusable DTI Data
 
-BindingDB, Human, and BioSNAP share one model-independent CSV loader:
+BindingDB, Human, and BioSNAP provide dataset-specific classes over one
+model-independent DTI CSV base class:
 
 ```python
-bindingdb = AutoProteinData("DTI/BindingDB", root="path/to/datasets")
+bindingdb = AutoProteinData("BindingDB/DTI", root="path/to/datasets")
 human_train = AutoProteinData(
-    "DTI/Human", root="path/to/datasets", split="random", subset="train"
+    "Human/DTI", root="path/to/datasets", split="random", subset="train"
 )
 biosnap_test = AutoProteinData(
-    "DTI/BioSNAP", root="path/to/datasets", split="cluster", subset="target_test"
+    "BioSNAP/DTI", root="path/to/datasets", split="cluster", subset="target_test"
 )
 ```
 
@@ -231,7 +259,7 @@ metadata, so another DTI model can reuse the same datasets unchanged.
 Every named model owns its implementation and assets:
 
 ```text
-kale_protein/examples/<model>/
+examples/<model>/
   config.yaml
   configuration.py
   modeling.py
@@ -247,7 +275,7 @@ new model card does not require editing `auto/`. External cards can be
 registered directly:
 
 ```python
-from kale_protein.core.registry import register_model_card
+from kaleprotein.core.registry import register_model_card
 
 register_model_card("path/to/my_model/config.yaml")
 model = AutoProteinModel("MyTask/MyModel")
@@ -276,7 +304,7 @@ trainable model dimensions. They never download real weights.
 
 ```bash
 python -m pytest -q
-python -m compileall -q kale_protein
+python -m compileall -q kaleprotein
 python -m build
 ```
 

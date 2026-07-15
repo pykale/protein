@@ -1,20 +1,34 @@
 # KaleProtein Architecture
 
 The repository has three layers: generic Auto dispatch, reusable core
-components, and complete model examples.
+components, and complete model examples. Only the `kaleprotein/` library package
+is installed; `examples/`, `tests/`, and `docs/` remain repository-level
+resources.
+
+```text
+kaleprotein/
+  auto/
+  core/
+examples/
+tests/
+docs/
+```
 
 ```mermaid
 flowchart TB
-    subgraph CORE["core: shared and reusable"]
+    subgraph PACKAGE["installed package: kaleprotein/"]
+      subgraph CORE["core: shared and reusable"]
         direction LR
+        CORE_DATA["data/<br/>utils + dataset modules + schemas"]
+        CORE_PREP["preprocessing/<br/>reusable transforms"]
+        CORE_MODELING["modeling/<br/>modalities + tasks"]
+        CORE_EVAL["evaluation/<br/>task metrics + interpretation"]
         REGISTRY["registry/"]
         CONFIG["config/"]
         WEIGHTS["weights/"]
-        MODALITIES["modalities/<br/>sequence, molecule, structure"]
-        TASKS["tasks/<br/>dti, inverse_folding"]
-    end
+      end
 
-    subgraph AUTO["auto: selection and construction"]
+      subgraph AUTO["auto: selection and construction"]
         direction LR
         DATA["AutoProteinData"]
         PREP["AutoProteinPreprocessor"]
@@ -26,9 +40,10 @@ flowchart TB
         DATA --> PREP --> MODEL --> EVAL --> INTERP
         MODEL --> EMBED
         MODEL --> PREDICT
+      end
     end
 
-    subgraph EXAMPLES["examples: complete named models"]
+    subgraph EXAMPLES["repository examples/: complete named models"]
         direction LR
         DRUGBAN["drugban_dti/<br/>config + model + scripts + assets"]
         MAPDIFF["mapdiff_inverse_folding/<br/>config + model + scripts + assets"]
@@ -125,14 +140,29 @@ flowchart LR
 ## Ownership Rules
 
 - `auto/` owns generic dispatch only.
-- `core/modalities/` owns reusable modality processors and encoders.
-- `core/tasks/` owns reusable datasets, collators, task heads, metrics, and
-  interpreters.
+- `core/data/utils/` owns fundamental FASTA, tabular, PDB, mmCIF, and file
+  parsing functions.
+- `core/data/<dataset>.py` owns built-in dataset adapters such as BindingDB,
+  BioSNAP, Human, and CATH. Public ids use `Dataset/Task` order.
+- `core/data/base.py` and `core/data/schemas.py` own shared dataset classes and
+  stable data records.
+- `core/preprocessing/` owns reusable transformations that prepare records for
+  model inputs without becoming dataset loaders.
+- `core/modeling/modalities/` owns reusable modality encoders and neural layers.
+- `core/modeling/tasks/` owns reusable fusion layers, heads, predictors, and
+  generators.
+- `core/evaluation/tasks/` owns task metrics and interpretation methods.
 - `examples/<model>/` owns concrete model composition, model-specific layers,
-  forward/generate behavior, scripts, and checkpoint adapters.
+  collators, feature graphs, forward/generate behavior, scripts, and checkpoint
+  adapters.
 - The complete model is the sole owner of full-model weight resolution and
   loading. Nested components never download the same checkpoint again.
 
 Adding a new model normally adds one example directory and model card. Core is
 changed only when the model introduces a genuinely reusable component; Auto is
 not changed.
+
+In a source checkout, `kaleprotein` discovers cards from the adjacent
+`examples/` directory. Installed wheels do not include those examples; users or
+downstream packages register external model cards through
+`discover_model_cards(...)` or `register_model_card(...)`.

@@ -215,10 +215,10 @@ marimo/_lsp/
 __marimo__/
 
 # KaleProtein local datasets and downloaded checkpoints
-kale_protein/examples/*/data/*
-!kale_protein/examples/*/data/.gitkeep
-kale_protein/examples/*/weights/*
-!kale_protein/examples/*/weights/.gitkeep
+examples/*/data/*
+!examples/*/data/.gitkeep
+examples/*/weights/*
+!examples/*/weights/.gitkeep
 
 # Streamlit
 .streamlit/secrets.toml
