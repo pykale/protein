@@ -127,10 +127,12 @@ def test_new_card_composes_registered_components_without_auto_changes(tmp_path):
     (tmp_path / "modeling.py").write_text(
         "from kaleprotein.auto import AutoProteinEmbedder, AutoProteinPredictor\n"
         "class RelativeModel:\n"
-        "    def __init__(self, config, pretrain=False):\n"
+        "    def __init__(self, config):\n"
         "        self.embedder = AutoProteinEmbedder.from_config(config.get_embedders()['input'], config=config)\n"
         "        self.predictor = AutoProteinPredictor.from_config(config.get_predictor(), config=config)\n"
-        "        self.pretrain = pretrain\n"
+        "        self.loaded_checkpoint = None\n"
+        "    def load_checkpoint(self, path):\n"
+        "        self.loaded_checkpoint = path\n"
         "    def __call__(self, value):\n"
         "        embeddings = self.embedder.embed(value)\n"
         "        return self.predictor(**embeddings)\n",
@@ -138,7 +140,8 @@ def test_new_card_composes_registered_components_without_auto_changes(tmp_path):
     )
     MODEL_CARD_REGISTRY.register("Architecture/Relative", config_path)
 
-    model = AutoProteinModel("Architecture/Relative", pretrain=True)
+    model = AutoProteinModel("Architecture/Relative", checkpoint="relative.ckpt")
 
     assert model("payload") == {"prediction": "embedded:payload:predicted"}
-    assert model.pretrain is True
+    assert model.loaded_checkpoint == "relative.ckpt"
+    assert model.weight_path == "relative.ckpt"

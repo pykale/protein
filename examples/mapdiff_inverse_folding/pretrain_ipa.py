@@ -6,7 +6,14 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 
-from kaleprotein.auto import AutoProteinData, AutoProteinModel, AutoProteinPreprocessor
+from kaleprotein.auto import (
+    AutoProteinConfig,
+    AutoProteinData,
+    AutoProteinModel,
+    AutoProteinPreprocessor,
+)
+from examples._utils import move_to_device
+from examples.mapdiff_inverse_folding.collators import MapDiffIPACollator
 
 
 def build_parser():
@@ -27,18 +34,20 @@ def main(argv=None):
     torch.manual_seed(args.seed)
 
     # 1. Load and preprocess protein graphs.
-    dataset = AutoProteinData("CATH/InverseFolding", source=args.data)
-    preprocessor = AutoProteinPreprocessor("protein/structure")
-    processed_structures = [preprocessor.featurize(record) for record in dataset]
-    model = AutoProteinModel("InverseFolding/MapDiff", pretrain=False).to(args.device)
+    data = AutoProteinData("CATH/InverseFolding", source=args.data)
+    config = AutoProteinConfig.from_pretrained("InverseFolding/MapDiff")
+    preprocessor = AutoProteinPreprocessor.from_config(config)
+    processed = preprocessor.process(data)
+    collator = MapDiffIPACollator(config=config)
     loader = DataLoader(
-        processed_structures,
+        processed["samples"],
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
-        collate_fn=model.ipa_collator,
+        collate_fn=collator,
     )
     # 2. Build the complete model and select its IPA prior parameters.
+    model = AutoProteinModel("InverseFolding/MapDiff").to(args.device)
     optimizer = torch.optim.AdamW(model.predictor.network.prior.parameters(), lr=args.learning_rate)
     model.train()
 
@@ -46,19 +55,12 @@ def main(argv=None):
     for _ in range(args.epochs):
         for batch in loader:
             optimizer.zero_grad(set_to_none=True)
-            batch["ipa_batch"] = batch["ipa_batch"].to(args.device)
-            output = model.prior_pretrain_loss(**batch)
+            batch = move_to_device(batch, args.device)
+            output = model.predictor.prior_pretrain_loss(**batch)
             output["loss"].backward()
             optimizer.step()
-    # 4. Save a prior-only checkpoint for diffusion training.
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(
-        {
-            "format": "kale-mapdiff-v1-ipa",
-            "prior_state_dict": model.predictor.network.prior.state_dict(),
-        },
-        args.output,
-    )
+    # 4. Save a complete checkpoint that AutoProteinModel can restore.
+    model.save_checkpoint(args.output)
     return args.output
 
 

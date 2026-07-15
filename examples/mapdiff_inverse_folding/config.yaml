@@ -5,6 +5,7 @@ task: inverse_folding
 objective: generative
 auto_map:
   AutoProteinConfig: configuration.MapDiffConfig
+  AutoProteinCollator: collators.MapDiffCollator
   AutoProteinModel: modeling.MapDiffModel
 pretrained:
   local_dir: weights
@@ -59,12 +60,6 @@ streams:
     input_key: backbone_coords
     processor: backbone
     processor_kwargs: {}
-  noisy_sequence:
-    modality: sequence
-    input_key: sequence
-    processor: masked
-    processor_kwargs:
-      max_length: 512
 components:
   embedders:
     structure:

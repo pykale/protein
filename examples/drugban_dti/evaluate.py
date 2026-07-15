@@ -13,15 +13,16 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from kaleprotein.auto import (
+    AutoProteinCollator,
     AutoProteinConfig,
     AutoProteinData,
+    AutoProteinInterpreter,
     AutoProteinModel,
     AutoProteinPreprocessor,
 )
+from examples._utils import move_to_device
 from examples.drugban_dti._cli import (
-    LazyPreprocessedDataset,
     add_data_arguments,
-    load_requested_checkpoint,
     print_json,
     resolve_device,
     seed_everything,
@@ -30,7 +31,7 @@ from examples.drugban_dti._cli import (
 
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
-    add_data_arguments(parser)
+    add_data_arguments(parser, batching=False)
     parser.add_argument("--checkpoint", type=Path)
     parser.add_argument("--pretrain", action="store_true")
     parser.add_argument("--threshold", type=float, default=0.5)
@@ -41,10 +42,10 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     seed_everything(args.seed)
 
-    # 1. Load and preprocess the held-out split.
+    # 1. Load normalized DTI records.
     if not args.root and not args.path:
         raise ValueError("Pass --root with a DrugBAN dataset tree or --path with a DTI CSV")
-    dataset = AutoProteinData(
+    data = AutoProteinData(
         f"{args.dataset}/DTI",
         root=args.root,
         path=args.path,
@@ -52,34 +53,36 @@ def main(argv=None):
         subset=args.subset,
         limit=args.limit,
     )
+
+    # 2. Preprocess SMILES and protein sequences.
     config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
     preprocessor = AutoProteinPreprocessor.from_config(config)
-    processed = LazyPreprocessedDataset(dataset, preprocessor)
+    processed = preprocessor.process(data)
 
-    # 2. Build the full model, load weights, and collate batches.
-    model = AutoProteinModel("DTI/DrugBAN", pretrain=args.pretrain)
-    model.to(resolve_device(args.device))
-    load_requested_checkpoint(model, args)
-    loader = model.make_dataloader(
-        processed, batch_size=args.batch_size, num_workers=args.num_workers
-    )
-    probabilities = []
-    labels = []
+    # 3. Collate data independently from the model.
+    collator = AutoProteinCollator.from_config(config)
+    device = resolve_device(args.device)
+    batch = move_to_device(collator(**processed), device)
+
+    # 4. Build the complete model and load requested weights.
+    model = AutoProteinModel(
+        "DTI/DrugBAN",
+        pretrain=args.pretrain,
+        checkpoint=args.checkpoint,
+    ).to(device)
     model.eval()
+
+    # 5. Embed both modalities and predict interactions.
     with torch.no_grad():
-        for batch in loader:
-            # 3. Embed protein and molecule streams, then predict interactions.
-            embeddings = model.embed(**batch)
-            output = model.predictor(**embeddings)
-            probabilities.append(output["probabilities"].detach().cpu())
-            labels.append(output["labels"].detach().cpu())
-    # 4. Compute evaluation-only metrics.
-    prediction = {
-        "probabilities": torch.cat(probabilities),
-        "labels": torch.cat(labels),
-    }
+        embeddings = model.embed(**batch)
+        prediction = model.predictor(**embeddings)
+
+    # 6. Evaluate or expose attention from the prediction mapping.
     metrics = model.evaluate(**prediction, threshold=args.threshold)
-    print_json(metrics)
+    attention = model.extract_attention(**prediction)
+    interpretation = AutoProteinInterpreter.from_config(config).explain(**attention)
+    result = {"metrics": metrics, "interpretation": interpretation}
+    print_json(result)
     return metrics
 
 

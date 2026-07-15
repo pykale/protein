@@ -10,7 +10,8 @@ on the upstream checkout, DGL, and DGL-LifeSci.
 drugban_dti/
   config.yaml          component ids, dimensions, training and weight metadata
   configuration.py     DrugBANConfig
-  modeling.py          complete model, collation, training, checkpoint adapter
+  collators.py         DrugBAN-specific tensor batching
+  modeling.py          pure model computation and checkpoint state adapter
   train.py
   evaluate.py
   predict.py
@@ -28,13 +29,15 @@ DrugBANModel
   AutoProteinPredictor("dti/ban")
 ```
 
-`DrugBANModel` alone owns full checkpoints. The component factories do not
-create or load another DrugBAN network.
+`AutoProteinModel` resolves and loads a requested full checkpoint once.
+`DrugBANModel` implements only model-state serialization and compatibility;
+component factories do not create or load another DrugBAN network.
 
 ## Evaluation Pipeline
 
 ```python
 from kaleprotein.auto import (
+    AutoProteinCollator,
     AutoProteinConfig,
     AutoProteinData,
     AutoProteinInterpreter,
@@ -53,19 +56,22 @@ data = AutoProteinData(
 # 2. Preprocess SMILES and protein sequences.
 config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
 preprocessor = AutoProteinPreprocessor.from_config(config)
-processed = preprocessor.transform_dataset(list(data)[:64])
+processed = preprocessor.process(data)
 
-# 3. Build the complete model and create one named batch mapping.
-model = AutoProteinModel("DTI/DrugBAN", pretrain=False)
-batch = model.collator(**processed)
+# 3. Collate data independently from the model.
+collator = AutoProteinCollator.from_config(config)
+batch = collator(**processed)
 
-# 4. Embed both modalities.
+# 4. Build the complete model and load weights when requested.
+model = AutoProteinModel("DTI/DrugBAN", checkpoint="drugban.pt")
+
+# 5. Embed both modalities.
 embeddings = model.embed(**batch)
 
-# 5. Predict interactions.
+# 6. Predict interactions.
 prediction = model.predictor(**embeddings)
 
-# 6. Evaluate or expose attention from the prediction mapping.
+# 7. Evaluate or expose attention from the prediction mapping.
 metrics = model.evaluate(**prediction)
 attention = model.extract_attention(**prediction)
 interpretation = AutoProteinInterpreter.from_config(config).explain(**attention)
@@ -77,8 +83,8 @@ returns flat keys such as `protein_embedding`, `protein_mask`,
 in its Python signature. Replacing the head or inserting a user-defined stage
 only requires accepting and returning the desired named fields.
 
-The shared preprocessing produces canonical 74-feature RDKit atoms. DrugBAN's
-collator adds the model-specific virtual-node bit before dense normalized graph convolution,
+The shared preprocessing produces canonical 74-feature RDKit atoms. The independent
+DrugBAN collator adds the model-specific virtual-node bit before dense normalized graph convolution,
 DrugBAN-compatible residue encoding and CNN layers, bilinear attention, and the
 MLP classifier.
 

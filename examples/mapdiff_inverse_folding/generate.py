@@ -7,10 +7,13 @@ from pathlib import Path
 import torch
 
 from kaleprotein.auto import (
+    AutoProteinCollator,
+    AutoProteinConfig,
     AutoProteinData,
     AutoProteinModel,
     AutoProteinPreprocessor,
 )
+from examples._utils import move_to_device
 
 
 def build_parser():
@@ -34,32 +37,44 @@ def main(argv=None):
     torch.manual_seed(args.seed)
 
     # 1. Load, preprocess, and collate input structures.
-    dataset = AutoProteinData("CATH/InverseFolding", source=args.input)
-    preprocessor = AutoProteinPreprocessor("protein/structure")
-    processed = {"samples": [preprocessor.featurize(record) for record in dataset]}
-    # 2. Build one complete model and load the selected checkpoint.
-    model = AutoProteinModel("InverseFolding/MapDiff", pretrain=args.pretrained).to(args.device)
-    if args.checkpoint:
-        model.load_compatible_checkpoint(args.checkpoint)
-    batch = model.collator(**processed)
-    batch["batch"] = batch["batch"].to(args.device)
-    # 3. Encode the condition and run the registered generator.
-    conditioning = model.embed(**batch)
-    output = model.predictor.generate(
-        **conditioning,
-        steps=args.steps,
-        method=args.method,
-        num_samples=args.num_samples,
-        temperature=args.temperature,
-    )
-    # 4. Serialize generated sequences and their denoising trajectory.
-    serializable = {"sequences": output["sequences"], "trajectory": output["trajectory"]}
+    data = AutoProteinData("CATH/InverseFolding", source=args.input)
+    config = AutoProteinConfig.from_pretrained("InverseFolding/MapDiff")
+    preprocessor = AutoProteinPreprocessor.from_config(config)
+    processed = preprocessor.process(data)
+
+    # 2. Collate input structures independently from the model.
+    collator = AutoProteinCollator.from_config(config)
+    batch = move_to_device(collator(**processed), args.device)
+
+    # 3. Build the model and load requested weights through AutoProteinModel.
+    model = AutoProteinModel(
+        "InverseFolding/MapDiff",
+        pretrain=args.pretrained,
+        checkpoint=args.checkpoint,
+    ).to(args.device)
+    model.eval()
+
+    # 4. Encode the condition and run the registered generator.
+    with torch.no_grad():
+        embeddings = model.embed(**batch)
+        generation = model.predictor.generate(
+            **embeddings,
+            steps=args.steps,
+            method=args.method,
+            num_samples=args.num_samples,
+            temperature=args.temperature,
+        )
+    # 5. Serialize generated sequences and their denoising trajectory.
+    serializable = {
+        "sequences": generation["sequences"],
+        "trajectory": generation["trajectory"],
+    }
     text = json.dumps(serializable, indent=2)
     if args.output:
         args.output.write_text(text + "\n", encoding="utf-8")
     else:
         print(text)
-    return output
+    return generation
 
 
 if __name__ == "__main__":

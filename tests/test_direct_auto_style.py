@@ -7,6 +7,7 @@ import torch
 
 from kaleprotein.auto import (
     AutoMoleculePreprocessor,
+    AutoProteinCollator,
     AutoProteinConfig,
     AutoProteinData,
     AutoProteinEvaluator,
@@ -28,18 +29,34 @@ def test_model_ids_are_card_driven_not_auto_hardcoded():
     assert config["auto_map"]["AutoProteinModel"] == "modeling.DrugBANModel"
 
 
-def test_drugban_evaluate_loads_data_through_auto_api():
-    source = (
-        Path(__file__).resolve().parents[1] / "examples" / "drugban_dti" / "evaluate.py"
-    ).read_text(encoding="utf-8")
-    tree = ast.parse(source)
+def test_example_evaluations_expose_the_named_auto_pipeline():
+    root = Path(__file__).resolve().parents[1]
+    scripts = {
+        "examples/drugban_dti/evaluate.py": "prediction = model.predictor(**embeddings)",
+        "examples/mapdiff_inverse_folding/evaluate.py": (
+            "generation = model.predictor.generate("
+        ),
+    }
 
-    assert any(
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "AutoProteinData"
-        for node in ast.walk(tree)
-    )
+    for relative_path, prediction_stage in scripts.items():
+        source = (root / relative_path).read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        assert any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "AutoProteinData"
+            for node in ast.walk(tree)
+        )
+        for stage in (
+            "processed = preprocessor.process(data)",
+            "collator = AutoProteinCollator.from_config(config)",
+            "collator(**processed)",
+            "embeddings = model.embed(**batch)",
+            prediction_stage,
+            "metrics = model.evaluate(**",
+            "interpretation = AutoProteinInterpreter.from_config",
+        ):
+            assert stage in source, f"{relative_path} is missing the visible stage: {stage}"
 
 
 def test_model_cards_do_not_require_pyyaml(monkeypatch):
@@ -74,7 +91,8 @@ def test_drugban_direct_pipeline_style(fake_rdkit_graph, tmp_path):
             {"target": protein_data, "drug": molecule_data, "label": 1},
         ]
     }
-    batch = model.collator(**processed)
+    collator = AutoProteinCollator.from_config(model.config)
+    batch = collator(**processed)
     embeddings = model.embed(**batch)
     prediction = model.predictor(**embeddings)
 
@@ -99,6 +117,8 @@ def test_drugban_direct_pipeline_style(fake_rdkit_graph, tmp_path):
     assert set(auto_metrics) == {"auroc", "auprc", "f1", "accuracy", "threshold"}
     assert attention["attention"].shape[0] == 2
     assert len(interpretation["samples"]) == 2
+    assert not hasattr(model, "collator")
+    assert not hasattr(model, "make_dataloader")
     assert set(model.state_dict()) == {
         *[key for key in model.state_dict() if key.startswith("protein_embedder.")],
         *[key for key in model.state_dict() if key.startswith("molecule_embedder.")],
@@ -162,13 +182,12 @@ def test_mapdiff_direct_generative_pipeline_style(tmp_path):
         tmp_path / "protein.pt",
     )
     graph = AutoProteinData("CATH/InverseFolding", source=tmp_path)[0]
-    structure_data = AutoProteinPreprocessor("protein/structure").featurize(
-        {"backbone_coords": graph.atom_pos, "sequence": graph.sequence}
-    )
+    config = AutoProteinConfig.from_pretrained("InverseFolding/MapDiff")
+    preprocessor = AutoProteinPreprocessor.from_config(config)
+    processed = preprocessor.process([graph])
+    collator = AutoProteinCollator.from_config(config)
+    batch = collator(**processed)
     model = AutoProteinModel("InverseFolding/MapDiff", pretrain=False)
-
-    processed = {"samples": [structure_data]}
-    batch = model.collator(**processed)
     conditioning = model.embed(**batch)
     generated = model.predictor.generate(**conditioning, steps=1)
     metrics = model.evaluate(**generated)
@@ -181,4 +200,5 @@ def test_mapdiff_direct_generative_pipeline_style(tmp_path):
     assert set(metrics) == {"sequence_recovery", "perplexity", "diversity"}
     assert set(auto_metrics) == {"sequence_recovery", "perplexity", "diversity"}
     assert interpretation["final_sequences"] == generated["sequences"]
+    assert not hasattr(model, "collator")
     assert all(key.startswith("predictor.network.") for key in model.state_dict())

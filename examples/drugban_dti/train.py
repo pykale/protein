@@ -6,19 +6,27 @@ import argparse
 import sys
 from pathlib import Path
 
+import torch
+from torch.nn import functional as F
+from torch.utils.data import DataLoader
+
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from kaleprotein.auto import (
+    AutoProteinCollator,
     AutoProteinConfig,
     AutoProteinData,
     AutoProteinModel,
     AutoProteinPreprocessor,
 )
+from examples._utils import move_to_device
 from examples.drugban_dti._cli import (
-    DATASETS, LazyPreprocessedDataset, add_data_arguments, load_dataset, print_json,
-    resolve_device, seed_everything,
+    add_data_arguments,
+    print_json,
+    resolve_device,
+    seed_everything,
 )
 
 
@@ -39,55 +47,116 @@ def build_parser():
 def main(argv=None):
     args = build_parser().parse_args(argv)
     seed_everything(args.seed)
+    if not args.root and not args.path:
+        raise ValueError("Pass --root with a DrugBAN dataset tree or --path with a DTI CSV")
 
-    # 1. Load and preprocess task data.
-    dataset = load_dataset(args)
+    # 1. Load and preprocess training records.
+    data = AutoProteinData(
+        f"{args.dataset}/DTI",
+        root=args.root,
+        path=args.path,
+        split=args.split,
+        subset=args.subset,
+        limit=args.limit,
+    )
     config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
     preprocessor = AutoProteinPreprocessor.from_config(config)
-    processed = LazyPreprocessedDataset(dataset, preprocessor)
+    processed = preprocessor.process(data)
 
-    # 2. Build the complete model and collate training batches.
-    model = AutoProteinModel("DTI/DrugBAN", pretrain=args.pretrain)
-    model.to(resolve_device(args.device))
-    loader = model.make_dataloader(
-        processed,
+    # 2. Build data collation and loading independently from the model.
+    collator = AutoProteinCollator.from_config(config)
+    loader = DataLoader(
+        processed["samples"],
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
+        collate_fn=collator,
     )
-    validation = None
+    validation_loader = None
     if args.validation_subset:
         if args.path:
-            raise ValueError("--validation-subset requires --root; a single --path has no sibling split")
+            raise ValueError(
+                "--validation-subset requires --root; a single --path has no sibling split"
+            )
         validation_data = AutoProteinData(
-            DATASETS[args.dataset],
+            f"{args.dataset}/DTI",
             root=args.root,
-            path=None,
             split=args.split,
             subset=args.validation_subset,
             limit=args.limit,
         )
-        validation = LazyPreprocessedDataset(validation_data, preprocessor)
-    first_batch = next(iter(loader))
+        validation_processed = preprocessor.process(validation_data)
+        validation_loader = DataLoader(
+            validation_processed["samples"],
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            collate_fn=collator,
+        )
 
-    # 3. Exercise the explicit embedding stage before optimization.
-    embeddings = model.embed(**first_batch)
+    # 3. Build the pure model and optimizer.
+    device = resolve_device(args.device)
+    model = AutoProteinModel("DTI/DrugBAN", pretrain=args.pretrain).to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
 
-    # 4. Train, validate, and save the full model checkpoint.
-    result = model.fit(
-        loader, valid_data=validation, epochs=args.epochs, learning_rate=args.learning_rate,
-        batch_size=args.batch_size,
+    # 4. Run explicit embedding, prediction, loss, and optimization steps.
+    history = []
+    embedding_shapes = None
+    for _ in range(args.epochs):
+        model.train()
+        total_loss = 0.0
+        examples = 0
+        for batch in loader:
+            batch = move_to_device(batch, device)
+            optimizer.zero_grad()
+            embeddings = model.embed(**batch)
+            prediction = model.predictor(**embeddings)
+            labels = prediction["labels"].float().view_as(prediction["logits"])
+            loss = F.binary_cross_entropy_with_logits(prediction["logits"], labels)
+            loss.backward()
+            optimizer.step()
+            count = labels.numel()
+            total_loss += float(loss.detach()) * count
+            examples += count
+            if embedding_shapes is None:
+                embedding_shapes = {
+                    name: list(value.shape)
+                    for name, value in embeddings.items()
+                    if name.endswith("_embedding")
+                }
+        history.append(total_loss / max(examples, 1))
+
+    result = {
+        "loss": history[-1] if history else None,
+        "history": history,
+        "epochs": args.epochs,
+    }
+
+    # 5. Evaluate the optional validation split from prediction dictionaries.
+    if validation_loader is not None:
+        probabilities = []
+        labels = []
+        model.eval()
+        with torch.no_grad():
+            for batch in validation_loader:
+                batch = move_to_device(batch, device)
+                embeddings = model.embed(**batch)
+                prediction = model.predictor(**embeddings)
+                probabilities.append(prediction["probabilities"].detach().cpu())
+                labels.append(prediction["labels"].detach().cpu())
+        result["validation"] = model.evaluate(
+            probabilities=torch.cat(probabilities),
+            labels=torch.cat(labels),
+        )
+
+    # 6. Save the full model checkpoint.
+    model.save_checkpoint(args.checkpoint, optimizer=optimizer, extra={"training": result})
+    print_json(
+        {
+            "checkpoint": str(args.checkpoint),
+            "training": result,
+            "embedding_shapes": embedding_shapes or {},
+        }
     )
-    model.save_checkpoint(args.checkpoint, extra={"training": result})
-    print_json({
-        "checkpoint": str(args.checkpoint),
-        "training": result,
-        "embedding_shapes": {
-            name: list(value.shape)
-            for name, value in embeddings.items()
-            if name.endswith("_embedding")
-        },
-    })
     return result
 
 

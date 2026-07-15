@@ -1,6 +1,7 @@
 """Registry-backed preprocessing Auto classes."""
 
 import importlib
+from collections.abc import Mapping
 
 import kaleprotein  # noqa: F401 - bootstrap lightweight registrations
 from kaleprotein.core.registry import PREPROCESSOR_REGISTRY
@@ -50,6 +51,12 @@ class SingleModalityPreprocessor:
     def featurize(self, data):
         return self.processor.transform(data)
 
+    def transform_sample(self, sample):
+        return self.processor.transform(sample)
+
+    def process(self, dataset):
+        return {"samples": [self.transform_sample(sample) for sample in dataset]}
+
 
 class MultiStreamPreprocessor:
     def __init__(self, config):
@@ -62,11 +69,13 @@ class MultiStreamPreprocessor:
     def transform_sample(self, sample):
         output = {name: processor.transform(sample) for name, processor in self.processors.items()}
         for key in ("label", "domain", "id", "metadata"):
-            if key in sample:
+            if isinstance(sample, Mapping) and key in sample:
                 output[key] = sample[key]
+            elif not isinstance(sample, Mapping) and hasattr(sample, key):
+                output[key] = getattr(sample, key)
         return output
 
-    def transform_dataset(self, dataset):
+    def process(self, dataset):
         return {"samples": [self.transform_sample(sample) for sample in dataset]}
 
 

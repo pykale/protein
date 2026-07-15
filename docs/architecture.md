@@ -32,12 +32,14 @@ flowchart TB
         direction LR
         DATA["AutoProteinData"]
         PREP["AutoProteinPreprocessor"]
+        COLLATE["AutoProteinCollator"]
         MODEL["AutoProteinModel"]
         EMBED["AutoProteinEmbedder"]
         PREDICT["AutoProteinPredictor"]
         EVAL["AutoProteinEvaluator"]
         INTERP["AutoProteinInterpreter"]
-        DATA --> PREP --> MODEL --> EVAL --> INTERP
+        DATA --> PREP --> COLLATE
+        COLLATE --> MODEL --> EVAL --> INTERP
         MODEL --> EMBED
         MODEL --> PREDICT
       end
@@ -95,8 +97,9 @@ Public pipeline boundaries exchange ordinary dictionaries. Each next stage
 expands that dictionary into named arguments:
 
 ```python
-processed = preprocessor.transform_dataset(records)
-batch = model.collator(**processed)
+processed = preprocessor.process(records)
+collator = AutoProteinCollator.from_config(config)
+batch = collator(**processed)
 embeddings = model.embed(**batch)
 prediction = model.predictor(**embeddings)
 metrics = model.evaluate(**prediction)
@@ -110,6 +113,10 @@ generators declare the fields they consume and accept unrelated metadata with
 `**kwargs` when it should flow to a later stage. This lets users replace or
 insert components using normal Python APIs instead of adapting positional
 tuples or framework-specific workflow containers.
+
+Concrete model classes never create datasets, preprocessors, collators, or
+data loaders. They receive already-collated tensor mappings. Executable scripts
+own batching, device transfer, optimization, and other workflow orchestration.
 
 ## Runtime Pipelines
 
@@ -154,9 +161,10 @@ flowchart LR
 - `core/evaluation/tasks/` owns task metrics and interpretation methods.
 - `examples/<model>/` owns concrete model composition, model-specific layers,
   collators, feature graphs, forward/generate behavior, scripts, and checkpoint
-  adapters.
-- The complete model is the sole owner of full-model weight resolution and
-  loading. Nested components never download the same checkpoint again.
+  state adapters. Collators remain separate from model classes.
+- `AutoProteinModel` owns full-model checkpoint resolution, optional download,
+  and the single call into the concrete model's `load_checkpoint()` adapter.
+  Nested components never resolve or download that checkpoint again.
 
 Adding a new model normally adds one example directory and model card. Core is
 changed only when the model introduces a genuinely reusable component; Auto is

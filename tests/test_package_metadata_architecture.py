@@ -49,6 +49,7 @@ def test_repository_uses_auto_core_examples_layers_only():
     root = Path(__file__).resolve().parents[1]
     package = root / "kaleprotein"
     assert (package / "auto" / "modeling.py").is_file()
+    assert (package / "auto" / "collation.py").is_file()
     assert (package / "core" / "registry").is_dir()
     assert (package / "core" / "data" / "utils" / "fasta.py").is_file()
     assert (package / "core" / "data" / "utils" / "pdb.py").is_file()
@@ -66,7 +67,9 @@ def test_repository_uses_auto_core_examples_layers_only():
         package / "core" / "evaluation" / "tasks" / "inverse_folding" / "interpreters.py"
     ).is_file()
     assert (root / "examples" / "drugban_dti" / "modeling.py").is_file()
+    assert (root / "examples" / "drugban_dti" / "collators.py").is_file()
     assert (root / "examples" / "mapdiff_inverse_folding" / "modeling.py").is_file()
+    assert (root / "examples" / "mapdiff_inverse_folding" / "collators.py").is_file()
     assert (root / "tests" / "test_registry.py").is_file()
     assert (root / "docs" / "architecture.md").is_file()
     assert not (package / "examples").exists()
@@ -79,3 +82,20 @@ def test_repository_uses_auto_core_examples_layers_only():
 
     for legacy in ("registry", "modalities", "tasks", "fusion", "heads", "runners", "conditioners"):
         assert not any((package / legacy).glob("*.py"))
+
+
+def test_example_models_do_not_own_data_workflow_objects():
+    root = Path(__file__).resolve().parents[1]
+    for relative_path in (
+        "examples/drugban_dti/modeling.py",
+        "examples/mapdiff_inverse_folding/modeling.py",
+    ):
+        source = (root / relative_path).read_text(encoding="utf-8")
+        for forbidden in (
+            "DataLoader",
+            "self.collator",
+            "make_dataloader",
+            "LazyPreprocessedDataset",
+            "load_requested_checkpoint",
+        ):
+            assert forbidden not in source, f"{relative_path} contains {forbidden}"

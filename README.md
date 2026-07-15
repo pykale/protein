@@ -94,6 +94,7 @@ The normal user entry point is one complete model:
 
 ```python
 from kaleprotein.auto import (
+    AutoProteinCollator,
     AutoProteinConfig,
     AutoProteinData,
     AutoProteinInterpreter,
@@ -112,19 +113,22 @@ data = AutoProteinData(
 # 2. Preprocess molecule and protein streams from the model card.
 config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
 preprocessor = AutoProteinPreprocessor.from_config(config)
-processed = preprocessor.transform_dataset(list(data)[:8])
+processed = preprocessor.process(data)
 
-# 3. Build the complete model and collate a batch.
-model = AutoProteinModel("DTI/DrugBAN", pretrain=False)
-batch = model.collator(**processed)
+# 3. Collate data independently from the model.
+collator = AutoProteinCollator.from_config(config)
+batch = collator(**processed)
 
-# 4. Embed with the model's registered modality encoders.
+# 4. Build the complete model and load requested weights.
+model = AutoProteinModel("DTI/DrugBAN", checkpoint="drugban.pt")
+
+# 5. Embed with the model's registered modality encoders.
 embeddings = model.embed(**batch)
 
-# 5. Predict with the model's registered DTI task head.
+# 6. Predict with the model's registered DTI task head.
 prediction = model.predictor(**embeddings)
 
-# 6. Evaluate or interpret when needed.
+# 7. Evaluate or interpret when needed.
 metrics = model.evaluate(**prediction)
 attention = model.extract_attention(**prediction)
 interpretation = AutoProteinInterpreter.from_config(config).explain(**attention)
@@ -184,6 +188,8 @@ component is a generator:
 
 ```python
 from kaleprotein.auto import (
+    AutoProteinCollator,
+    AutoProteinConfig,
     AutoProteinData,
     AutoProteinInterpreter,
     AutoProteinModel,
@@ -191,43 +197,42 @@ from kaleprotein.auto import (
 )
 
 # 1. Load a PDB or processed CATH graph.
-record = AutoProteinData("CATH/InverseFolding", source="structure.pdb")[0]
+data = AutoProteinData("CATH/InverseFolding", source="structure.pdb")
 
 # 2. Preprocess the structure condition.
-preprocessor = AutoProteinPreprocessor("protein/structure")
-structure = preprocessor.featurize(
-    {
-        "backbone_coords": record.atom_pos,
-        "sequence": record.sequence,
-        "id": record.identifier,
-    }
-)
-processed = {"samples": [structure]}
+config = AutoProteinConfig.from_pretrained("InverseFolding/MapDiff")
+preprocessor = AutoProteinPreprocessor.from_config(config)
+processed = preprocessor.process(data)
 
-# 3. Load one complete model and collate named inputs.
+# 3. Collate data independently from the model.
+collator = AutoProteinCollator.from_config(config)
+batch = collator(**processed)
+
+# 4. Load one complete model.
 model = AutoProteinModel("InverseFolding/MapDiff", pretrain=True)
-batch = model.collator(**processed)
 
-# 4. Encode the condition, then generate a sequence.
-conditioning = model.embed(**batch)
+# 5. Encode the condition.
+embeddings = model.embed(**batch)
+
+# 6. Generate and evaluate sequences.
 generation = model.predictor.generate(
-    **conditioning,
+    **embeddings,
     steps=100,
     method="ddim",
 )
 metrics = model.evaluate(**generation)
-trajectory = AutoProteinInterpreter.from_config(model.config).explain(**generation)
+interpretation = AutoProteinInterpreter.from_config(config).explain(**generation)
 ```
 
-`pretrain=True` selects the release-compatible architecture, checks the local
-card `weights/` directory, and downloads the configured MapDiff v1.0.1 weight
-only when absent. The complete model loads that checkpoint exactly once.
+`pretrain=True` makes `AutoProteinModel` select the release checkpoint, check
+the card's local `weights/` directory, download the configured MapDiff v1.0.1
+weight only when absent, and invoke the model's checkpoint state adapter once.
 
 ```bash
 python -m examples.mapdiff_inverse_folding.pretrain_ipa \
   /data/cath/train --output ipa.pt
 python -m examples.mapdiff_inverse_folding.train_diffusion \
-  /data/cath/train --ipa-checkpoint ipa.pt --output mapdiff.pt
+  /data/cath/train --checkpoint ipa.pt --output mapdiff.pt
 python -m examples.mapdiff_inverse_folding.evaluate \
   /data/cath/test --pretrained
 python -m examples.mapdiff_inverse_folding.generate \

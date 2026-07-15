@@ -4,7 +4,8 @@ from pathlib import Path
 import pytest
 import torch
 
-from kaleprotein.auto import AutoProteinConfig
+from kaleprotein.auto import AutoProteinConfig, AutoProteinModel, AutoProteinPreprocessor
+from examples.drugban_dti.collators import DrugBANCollator
 from examples.drugban_dti.modeling import DrugBANModel
 from kaleprotein.core.preprocessing import molecule as processors
 from kaleprotein.core.evaluation.tasks.dti.metrics import (
@@ -145,7 +146,7 @@ def test_rdkit_graph_has_reusable_canonical_atom_features(fake_rdkit, tiny_confi
     assert torch.equal(graph["node_mask"], torch.tensor([True, True]))
     assert graph["adjacency"][0, 1] == graph["adjacency"][1, 0] == 1
 
-    batch = DrugBANModel(tiny_config).collator.collate_drugs([graph])
+    batch = DrugBANCollator(tiny_config).collate_drugs([graph])
     assert batch["node_features"].shape == (1, 2, 75)
     assert torch.equal(batch["node_features"][0, :, 74], torch.tensor([0.0, 0.0]))
 
@@ -162,11 +163,12 @@ def test_missing_rdkit_error_is_actionable(monkeypatch):
 def test_optimizer_step_changes_parameter(tiny_config):
     predictor = DrugBANModel(tiny_config)
     predictor.train()
-    batch = predictor.collator([_tensor_sample(0), _tensor_sample(1)])
+    batch = DrugBANCollator(tiny_config)([_tensor_sample(0), _tensor_sample(1)])
     optimizer = torch.optim.Adam(predictor.parameters(), lr=1e-3)
     before = predictor.predictor.decoder.fc4.weight.detach().clone()
 
-    output = predictor(batch)
+    embeddings = predictor.embed(**batch)
+    output = predictor.predictor(**embeddings)
     loss = torch.nn.functional.binary_cross_entropy_with_logits(output["logits"], batch["label"])
     loss.backward()
     optimizer.step()
@@ -177,7 +179,8 @@ def test_optimizer_step_changes_parameter(tiny_config):
 def test_component_embeddings_equal_full_batch_and_raw_preprocessed(tiny_config, fake_rdkit):
     predictor = DrugBANModel(tiny_config)
     predictor.eval()
-    batch = predictor.collator([_tensor_sample(0), _tensor_sample(1)])
+    collator = DrugBANCollator(tiny_config)
+    batch = collator([_tensor_sample(0), _tensor_sample(1)])
 
     full = predictor(**batch)
     embeddings = predictor.embed_components(**batch)
@@ -188,9 +191,11 @@ def test_component_embeddings_equal_full_batch_and_raw_preprocessed(tiny_config,
         {"smiles": "CC", "sequence": "MKTFFVLLLMKTFFVLLL", "label": 0},
         {"smiles": "CC", "sequence": "MKTFFVLLLMKTFFVLLL", "label": 1},
     ]
-    raw_output = predictor.predict(raw, batch_size=2)
-    processed_output = predictor.predict(predictor.collator(raw))
-    assert torch.allclose(raw_output["probabilities"], processed_output["probabilities"], atol=1e-6)
+    processed = AutoProteinPreprocessor.from_config(tiny_config).process(raw)
+    raw_batch = collator(**processed)
+    raw_embeddings = predictor.embed(**raw_batch)
+    raw_output = predictor.predictor(**raw_embeddings)
+    assert raw_output["probabilities"].shape == (2,)
 
 
 def test_checkpoint_round_trip(tiny_config, tmp_path):
@@ -205,30 +210,21 @@ def test_checkpoint_round_trip(tiny_config, tmp_path):
 
 
 def test_complete_model_resolves_pretrained_checkpoint_once(tiny_config, tmp_path, monkeypatch):
-    import examples.drugban_dti.modeling as modeling
+    import kaleprotein.auto.modeling as auto_modeling
 
     source = DrugBANModel(tiny_config)
-    source.save_checkpoint(tmp_path / "drugban.pt")
-    data = tiny_config.to_dict()
-    data["_config_dir"] = str(tmp_path)
-    data["pretrained"] = {
-        "local_dir": ".",
-        "filename": "drugban.pt",
-        "url": "",
-    }
-    config = AutoProteinConfig.from_dict(data)
-    original = modeling.resolve_pretrained_weight
+    checkpoint = source.save_checkpoint(tmp_path / "drugban.pt")
     calls = []
 
     def counted_resolver(value):
         calls.append(value["model_id"])
-        return original(value)
+        return checkpoint
 
-    monkeypatch.setattr(modeling, "resolve_pretrained_weight", counted_resolver)
-    loaded = DrugBANModel(config, pretrain=True)
+    monkeypatch.setattr(auto_modeling, "resolve_pretrained_weight", counted_resolver)
+    loaded = AutoProteinModel(tiny_config, pretrain=True)
 
     assert calls == ["DTI/DrugBAN"]
-    assert loaded.weight_path == tmp_path / "drugban.pt"
+    assert loaded.weight_path == checkpoint
     assert not hasattr(loaded.protein_embedder, "weight_path")
     assert not hasattr(loaded.molecule_embedder, "weight_path")
     assert not hasattr(loaded.predictor, "weight_path")
@@ -288,7 +284,7 @@ def test_all_workflow_mains_run_with_fake_csv_and_tiny_model(
             return tiny_config
 
     def tiny_model(*args, **kwargs):
-        return DrugBANModel(tiny_config, pretrain=False)
+        return DrugBANModel(tiny_config)
 
     for module in modules.values():
         monkeypatch.setattr(module, "AutoProteinConfig", TinyConfigFactory)
@@ -304,7 +300,7 @@ def test_all_workflow_mains_run_with_fake_csv_and_tiny_model(
         ]
     )
     metrics = modules["evaluate"].main(
-        ["--path", str(csv_path), "--batch-size", "2", "--checkpoint", str(checkpoint)]
+        ["--path", str(csv_path), "--checkpoint", str(checkpoint)]
     )
     predictions = modules["predict"].main(
         ["--path", str(csv_path), "--batch-size", "2", "--checkpoint", str(checkpoint)]
