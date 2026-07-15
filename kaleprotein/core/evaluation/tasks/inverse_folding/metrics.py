@@ -6,7 +6,7 @@ import math
 from itertools import combinations
 
 from kaleprotein.core.registry import EVALUATOR_REGISTRY
-from kaleprotein.core.data.schemas import AA_ALPHABET, AA_TO_INDEX
+from kaleprotein.core.data.records import AA_ALPHABET, AA_TO_INDEX
 
 
 def _sequences(value):

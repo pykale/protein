@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from ..schemas import SequenceRecord
+from ..records import SequenceRecord
 from .files import require_file
 
 

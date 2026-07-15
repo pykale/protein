@@ -1,4 +1,4 @@
-"""Stable records shared by dataset adapters and data utilities."""
+"""Stable data records shared by dataset adapters and parsing utilities."""
 
 from dataclasses import dataclass, field
 from typing import Any

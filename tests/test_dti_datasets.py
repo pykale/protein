@@ -1,7 +1,7 @@
 import pytest
 
 from kaleprotein.auto import AutoProteinData
-from kaleprotein.core.data.base import DTIDataset
+from kaleprotein.core.data.datasets import DTIDataset
 from kaleprotein.core.data.bindingdb import BindingDBDTIDataset
 from kaleprotein.core.data.biosnap import BioSNAPDTIDataset
 from kaleprotein.core.data.human import HumanDTIDataset

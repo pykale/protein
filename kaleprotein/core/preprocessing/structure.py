@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from kaleprotein.core.data.schemas import StructureRecord
+from kaleprotein.core.data.records import StructureRecord
 from kaleprotein.core.data.utils import parse_mmcif, parse_pdb
 from kaleprotein.core.registry import PREPROCESSOR_REGISTRY
 

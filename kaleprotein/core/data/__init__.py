@@ -1,8 +1,8 @@
 """Built-in datasets, stable records, and fundamental data utilities."""
 
 from . import bindingdb, biosnap, cath, human
-from .base import DTICsvDataset, DTIDataset, ListDataset
-from .schemas import DTISample, SequenceRecord, StructureRecord
+from .datasets import DTICsvDataset, DTIDataset, ListDataset
+from .records import DTISample, SequenceRecord, StructureRecord
 
 __all__ = [
     "DTICsvDataset",

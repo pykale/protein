@@ -2,7 +2,7 @@
 
 from kaleprotein.core.registry import DATASET_REGISTRY
 
-from .base import DTICsvDataset
+from .datasets import DTICsvDataset
 
 
 @DATASET_REGISTRY.register("BioSNAP/DTI")
