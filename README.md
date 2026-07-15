@@ -69,6 +69,7 @@ The normal user entry point is one complete model:
 from kale_protein.auto import (
     AutoProteinConfig,
     AutoProteinData,
+    AutoProteinInterpreter,
     AutoProteinModel,
     AutoProteinPreprocessor,
 )
@@ -84,21 +85,38 @@ data = AutoProteinData(
 # 2. Preprocess molecule and protein streams from the model card.
 config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
 preprocessor = AutoProteinPreprocessor.from_config(config)
-processed = [preprocessor.transform_sample(sample) for sample in data]
+processed = preprocessor.transform_dataset(list(data)[:8])
 
 # 3. Build the complete model and collate a batch.
 model = AutoProteinModel("DTI/DrugBAN", pretrain=False)
-batch = model.collator(processed[:8])
+batch = model.collator(**processed)
 
 # 4. Embed with the model's registered modality encoders.
-embeddings = model.embed(batch)
+embeddings = model.embed(**batch)
 
 # 5. Predict with the model's registered DTI task head.
-prediction = model.predictor(embeddings)
+prediction = model.predictor(**embeddings)
 
 # 6. Evaluate or interpret when needed.
-metrics = model.evaluate(processed)
-attention = model.extract_attention(batch)
+metrics = model.evaluate(**prediction)
+attention = model.extract_attention(**prediction)
+interpretation = AutoProteinInterpreter.from_config(config).explain(**attention)
+```
+
+Every public stage returns a dictionary, and the next stage consumes named
+fields with `**`. DrugBAN's embedding contract includes
+`protein_embedding`, `protein_mask`, `molecule_embedding`, and
+`molecule_mask`; metadata such as labels, sample ids, sequences, and atom names
+flows forward under explicit keys. A custom predictor can therefore implement
+the same named signature without depending on a tuple position or opaque
+workflow object.
+
+```python
+def my_head(protein_embedding, molecule_embedding, **metadata):
+    scores = (protein_embedding.mean(1) * molecule_embedding.mean(1)).sum(-1)
+    return {"scores": scores, **metadata}
+
+custom_prediction = my_head(**embeddings)
 ```
 
 Internally, `DrugBANModel` composes reusable components declared in its card:
@@ -138,13 +156,17 @@ Generative models use the same complete-model entry point. Their predictor
 component is a generator:
 
 ```python
-from kale_protein.auto import AutoProteinData, AutoProteinModel, AutoProteinPreprocessor
-from kale_protein.core.tasks.inverse_folding import CollatorDiff
+from kale_protein.auto import (
+    AutoProteinData,
+    AutoProteinInterpreter,
+    AutoProteinModel,
+    AutoProteinPreprocessor,
+)
 
 # 1. Load a PDB or processed CATH graph.
 record = AutoProteinData("InverseFolding/CATH", source="structure.pdb")[0]
 
-# 2. Preprocess and collate the structure condition.
+# 2. Preprocess the structure condition.
 preprocessor = AutoProteinPreprocessor("protein/structure")
 structure = preprocessor.featurize(
     {
@@ -153,18 +175,21 @@ structure = preprocessor.featurize(
         "id": record.identifier,
     }
 )
-batch = CollatorDiff()([structure["graph"]])
+processed = {"samples": [structure]}
 
-# 3. Load one complete model.
+# 3. Load one complete model and collate named inputs.
 model = AutoProteinModel("InverseFolding/MapDiff", pretrain=True)
+batch = model.collator(**processed)
 
 # 4. Encode the condition, then generate a sequence.
-conditioning = model.embed(batch)
+conditioning = model.embed(**batch)
 generation = model.predictor.generate(
-    conditioning,
+    **conditioning,
     steps=100,
     method="ddim",
 )
+metrics = model.evaluate(**generation)
+trajectory = AutoProteinInterpreter.from_config(model.config).explain(**generation)
 ```
 
 `pretrain=True` selects the release-compatible architecture, checks the local

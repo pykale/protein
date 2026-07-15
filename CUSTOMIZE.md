@@ -70,8 +70,12 @@ class MySequenceEncoder(nn.Module):
         super().__init__()
         self.encoder = build_encoder(hidden_dim)
 
-    def embed(self, batch):
-        return {"embedding": self.encoder(batch["tokens"]), "mask": batch["mask"]}
+    def embed(self, tokens, mask, **metadata):
+        return {
+            "sequence_embedding": self.encoder(tokens),
+            "sequence_mask": mask,
+            **metadata,
+        }
 
 
 @AutoProteinPredictor.register("classification/my_head")
@@ -80,8 +84,12 @@ class MyClassificationHead(nn.Module):
         super().__init__()
         self.output = nn.Linear(hidden_dim, classes)
 
-    def forward(self, embeddings):
-        return {"logits": self.output(embeddings["embedding"])}
+    def forward(self, sequence_embedding, sequence_mask=None, **metadata):
+        return {
+            "logits": self.output(sequence_embedding),
+            "sequence_mask": sequence_mask,
+            **metadata,
+        }
 ```
 
 Put a component in core only when it is genuinely useful to more than one
@@ -179,12 +187,19 @@ class MyModel(nn.Module):
             state = load_checkpoint_state_dict(path)
             self.load_state_dict(adapt_checkpoint_keys(state), strict=True)
 
-    def embed(self, batch):
-        return self.embedder.embed(batch)
+    def embed(self, tokens, mask, **metadata):
+        return self.embedder.embed(tokens=tokens, mask=mask, **metadata)
 
-    def forward(self, batch):
-        return self.predictor(self.embed(batch))
+    def forward(self, **batch):
+        embeddings = self.embed(**batch)
+        return self.predictor(**embeddings)
 ```
+
+Every stage should return a dictionary. The next stage consumes it with
+`**mapping`, so its field names form a normal, inspectable Python API. Choose
+semantic names such as `sequence_embedding`, `structure_mask`, `labels`, or
+`sample_ids`; Auto performs discovery and construction but does not hardcode a
+model's intermediate tensor schema.
 
 For a generative model, the predictor implements `generate()` and the full
 model may expose a convenience `generate()` method. Do not add a second Auto

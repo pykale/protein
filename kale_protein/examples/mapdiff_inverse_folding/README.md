@@ -40,8 +40,12 @@ checkpoint owner.
 ## Generation Pipeline
 
 ```python
-from kale_protein.auto import AutoProteinData, AutoProteinModel, AutoProteinPreprocessor
-from kale_protein.core.tasks.inverse_folding import CollatorDiff
+from kale_protein.auto import (
+    AutoProteinData,
+    AutoProteinInterpreter,
+    AutoProteinModel,
+    AutoProteinPreprocessor,
+)
 
 # 1. Load a processed CATH graph or PDB.
 record = AutoProteinData("InverseFolding/CATH", source="structure.pdb")[0]
@@ -56,26 +60,28 @@ structure = preprocessor.featurize(
     }
 )
 
-# 3. Build sparse EGNN and padded IPA views.
-batch = CollatorDiff()([structure["graph"]])
-
-# 4. Load one complete model.
+# 3. Load one complete model and build its named batch mapping.
 model = AutoProteinModel("InverseFolding/MapDiff", pretrain=True)
+processed = {"samples": [structure]}
+batch = model.collator(**processed)
 
-# 5. Encode the structural condition.
-conditioning = model.embed(batch)
+# 4. Encode the structural condition.
+conditioning = model.embed(**batch)
 
-# 6. Run iterative sequence generation.
-output = model.predictor.generate(
-    conditioning,
+# 5. Run iterative sequence generation and evaluation.
+generation = model.predictor.generate(
+    **conditioning,
     steps=100,
     method="ddim",
     num_samples=1,
 )
+metrics = model.evaluate(**generation)
+trajectory = AutoProteinInterpreter.from_config(model.config).explain(**generation)
 ```
 
 Generation returns sequences, logits, token ids, and a non-empty denoising
-trajectory.
+trajectory. It also carries `reference_sequences` from the condition mapping,
+so generation metrics can consume the dictionary directly.
 
 ## Architectures
 

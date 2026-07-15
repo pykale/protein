@@ -12,15 +12,22 @@ class BilinearAttentionMapInterpreter:
     def __init__(self, config):
         self.config = config
 
-    def explain(self, predictor, data, output=None):
-        output = predictor.extract_attention(data) if output is None else output
+    def explain(self, predictor=None, data=None, output=None, **attention_fields):
+        if attention_fields:
+            if output is not None:
+                raise TypeError("Pass attention as output or keyword fields, not both.")
+            output = attention_fields
+        elif output is None:
+            if predictor is None:
+                raise ValueError("Attention interpretation requires attention fields or a predictor.")
+            output = predictor.extract_attention(data)
         attention = output.get("attention")
         if not torch.is_tensor(attention):
             raise ValueError("Attention interpretation requires a single, consistently padded tensor batch")
-        drug_mask = torch.as_tensor(output["drug_mask"], dtype=torch.bool)
+        drug_mask = torch.as_tensor(output["molecule_mask"], dtype=torch.bool)
         protein_mask = torch.as_tensor(output["protein_mask"], dtype=torch.bool)
-        atom_symbols = output.get("atom_symbols") or [[] for _ in range(attention.shape[0])]
-        sequences = output.get("sequences") or [None for _ in range(attention.shape[0])]
+        atom_symbols = output.get("molecule_atom_symbols") or [[] for _ in range(attention.shape[0])]
+        sequences = output.get("protein_sequences") or [None for _ in range(attention.shape[0])]
 
         samples = []
         normalized_maps = []

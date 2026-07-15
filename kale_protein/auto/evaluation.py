@@ -20,8 +20,30 @@ class MultiMetricEvaluator:
             _import_task_module(task, "metrics")
         self.metrics = [(name, EVALUATOR_REGISTRY.get((task, name))()) for name in metric_names]
 
-    def evaluate(self, outputs, data):
-        return {name: metric(outputs, data) for name, metric in self.metrics}
+    def evaluate(self, outputs=None, data=None, labels=None, **prediction):
+        """Evaluate a prediction mapping passed directly or expanded with ``**``."""
+
+        if outputs is not None:
+            if prediction:
+                raise TypeError("Pass evaluator outputs either as a mapping or as keyword fields, not both.")
+            prediction = outputs
+        if not isinstance(prediction, dict) or not prediction:
+            raise ValueError("Evaluation requires a non-empty prediction mapping.")
+        if data is None:
+            labels = prediction.get("labels") if labels is None else labels
+            references = prediction.get("reference_sequences")
+            if labels is not None:
+                data = {"label": labels}
+            elif references is not None:
+                data = references
+            else:
+                raise ValueError(
+                    "Evaluation requires data, labels, or reference_sequences "
+                    "alongside prediction fields."
+                )
+        return {name: metric(prediction, data) for name, metric in self.metrics}
+
+    __call__ = evaluate
 
 
 def _import_task_module(task, module):

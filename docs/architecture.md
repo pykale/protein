@@ -74,6 +74,28 @@ For a discriminative model, the predictor is the task fusion/head. For a
 generative model, the predictor is the generator or denoiser. Component Auto
 classes are model-author APIs; they do not resolve full model cards.
 
+## Named Stage Contracts
+
+Public pipeline boundaries exchange ordinary dictionaries. Each next stage
+expands that dictionary into named arguments:
+
+```python
+processed = preprocessor.transform_dataset(records)
+batch = model.collator(**processed)
+embeddings = model.embed(**batch)
+prediction = model.predictor(**embeddings)
+metrics = model.evaluate(**prediction)
+```
+
+Auto requires mappings at these boundaries, but it does not prescribe one
+universal tensor schema. The concrete model card owns meaningful names. For
+example, DrugBAN uses `protein_embedding` and `molecule_embedding`, while
+MapDiff uses `structure_embedding`, `conditioning`, and `batch`. Predictors and
+generators declare the fields they consume and accept unrelated metadata with
+`**kwargs` when it should flow to a later stage. This lets users replace or
+insert components using normal Python APIs instead of adapting positional
+tuples or framework-specific workflow containers.
+
 ## Runtime Pipelines
 
 DrugBAN:

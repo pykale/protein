@@ -37,6 +37,7 @@ create or load another DrugBAN network.
 from kale_protein.auto import (
     AutoProteinConfig,
     AutoProteinData,
+    AutoProteinInterpreter,
     AutoProteinModel,
     AutoProteinPreprocessor,
 )
@@ -52,22 +53,29 @@ data = AutoProteinData(
 # 2. Preprocess SMILES and protein sequences.
 config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
 preprocessor = AutoProteinPreprocessor.from_config(config)
-processed = [preprocessor.transform_sample(sample) for sample in data]
+processed = preprocessor.transform_dataset(list(data)[:64])
 
-# 3. Build the complete model and create evaluation batches.
+# 3. Build the complete model and create one named batch mapping.
 model = AutoProteinModel("DTI/DrugBAN", pretrain=False)
-loader = model.make_dataloader(processed, batch_size=64)
-batch = next(iter(loader))
+batch = model.collator(**processed)
 
 # 4. Embed both modalities.
-embeddings = model.embed(batch)
+embeddings = model.embed(**batch)
 
 # 5. Predict interactions.
-output = model.predictor(embeddings)
+prediction = model.predictor(**embeddings)
 
-# 6. Evaluate the complete dataset (the model batches it internally).
-metrics = model.evaluate(processed)
+# 6. Evaluate or expose attention from the prediction mapping.
+metrics = model.evaluate(**prediction)
+attention = model.extract_attention(**prediction)
+interpretation = AutoProteinInterpreter.from_config(config).explain(**attention)
 ```
+
+The stage contracts are ordinary dictionaries. In particular, `embed()`
+returns flat keys such as `protein_embedding`, `protein_mask`,
+`molecule_embedding`, and `molecule_mask`; the BAN head declares those names
+in its Python signature. Replacing the head or inserting a user-defined stage
+only requires accepting and returning the desired named fields.
 
 The shared preprocessing produces canonical 74-feature RDKit atoms. DrugBAN's
 collator adds the model-specific virtual-node bit before dense normalized graph convolution,

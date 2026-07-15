@@ -11,7 +11,6 @@ from kale_protein.auto import (
     AutoProteinModel,
     AutoProteinPreprocessor,
 )
-from kale_protein.core.tasks.inverse_folding.collators import CollatorDiff
 
 
 def build_parser():
@@ -37,16 +36,17 @@ def main(argv=None):
     # 1. Load, preprocess, and collate input structures.
     dataset = AutoProteinData("InverseFolding/CATH", source=args.input)
     preprocessor = AutoProteinPreprocessor("protein/structure")
-    processed_graphs = [preprocessor.featurize(record)["graph"] for record in dataset]
-    batch = CollatorDiff()(processed_graphs).to(args.device)
+    processed = {"samples": [preprocessor.featurize(record) for record in dataset]}
     # 2. Build one complete model and load the selected checkpoint.
     model = AutoProteinModel("InverseFolding/MapDiff", pretrain=args.pretrained).to(args.device)
     if args.checkpoint:
         model.load_compatible_checkpoint(args.checkpoint)
+    batch = model.collator(**processed)
+    batch["batch"] = batch["batch"].to(args.device)
     # 3. Encode the condition and run the registered generator.
-    conditioning = model.embed(batch)
+    conditioning = model.embed(**batch)
     output = model.predictor.generate(
-        conditioning,
+        **conditioning,
         steps=args.steps,
         method=args.method,
         num_samples=args.num_samples,

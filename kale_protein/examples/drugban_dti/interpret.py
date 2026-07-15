@@ -48,9 +48,10 @@ def main(argv=None):
     samples = []
     for batch in loader:
         # 3. Embed and predict before optional attention interpretation.
-        embeddings = model.embed(batch)
-        output = model.predictor(embeddings)
-        samples.extend(interpreter.explain(model, batch, output=output)["samples"])
+        embeddings = model.embed(**batch)
+        prediction = model.predictor(**embeddings)
+        attention = model.extract_attention(**prediction)
+        samples.extend(interpreter.explain(**attention)["samples"])
     result = {"samples": samples}
     print_json(result)
     return result

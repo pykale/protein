@@ -174,7 +174,7 @@ def test_tiny_optimizer_step_and_iterative_sampling():
 def test_generator_consumes_precomputed_structure_condition(monkeypatch):
     model = MapDiffModel(_tiny_config(), pretrain=False)
     batch = CollatorDiff()([_graphs()[0]])
-    encoded = model.embed(batch)
+    encoded = model.embed(batch=batch)
     original_forward = model.network.forward
     seen = []
 
@@ -183,7 +183,7 @@ def test_generator_consumes_precomputed_structure_condition(monkeypatch):
         return original_forward(value, conditioning=conditioning)
 
     monkeypatch.setattr(model.network, "forward", recording_forward)
-    model.predictor(encoded)
+    model.predictor(**encoded)
 
     assert len(seen) == 1
     assert seen[0] is encoded["conditioning"]
@@ -246,7 +246,8 @@ def test_configured_release_url_selects_exact_embedded_profile():
 def test_auto_direct_style_and_workflow_modules_are_import_safe():
     model = AutoProteinModel("InverseFolding/MapDiff", pretrain=False)
     batch = CollatorDiff()([_graphs()[0]])
-    output = model.predictor.generate(model.embed(batch), steps=2, num_samples=1)
+    embeddings = model.embed(batch=batch)
+    output = model.predictor.generate(**embeddings, steps=2, num_samples=1)
     assert output["sequences"] and output["trajectory"]
 
     for module_name in ("pretrain_ipa", "train_diffusion", "evaluate", "generate"):
