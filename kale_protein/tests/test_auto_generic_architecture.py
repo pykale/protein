@@ -1,13 +1,15 @@
 from pathlib import Path
 
-from kale_protein.auto import AutoProteinConfig, AutoProteinModel, AutoProteinPreprocessor
-from kale_protein.registry import (
-    MODEL_CARD_REGISTRY,
-    MODALITY_PROCESSOR_REGISTRY,
-    PRESET_REGISTRY,
+from kale_protein.auto import (
+    AutoProteinConfig,
+    AutoProteinEmbedder,
+    AutoProteinModel,
+    AutoProteinPredictor,
+    AutoProteinPreprocessor,
 )
-from kale_protein.registry.base import Registry
-from kale_protein.registry.model_cards import discover_model_cards
+from kale_protein.core.registry import MODEL_CARD_REGISTRY, PREPROCESSOR_REGISTRY
+from kale_protein.core.registry.base import Registry
+from kale_protein.core.registry.model_cards import discover_model_cards
 
 
 def _fake_card_text(model_id="Architecture/Fake", name="architecture-fake"):
@@ -16,154 +18,126 @@ model_id: {model_id}
 name: {name}
 task: fake_task
 objective: generative
-runner: fake_runner
+auto_map:
+  AutoProteinModel: modeling.RelativeModel
 streams:
   input:
-    modality: fake_modality
+    modality: architecture
     input_key: payload
-    processor: fake_processor
-    encoder: fake_encoder
-head:
-  type: fake_head
+    processor: fake
+components:
+  embedders:
+    input:
+      id: architecture/relative_embedder
+  predictor:
+    id: architecture/relative_predictor
 """
 
 
-def test_model_card_discovery_uses_config_metadata(tmp_path):
+def test_model_card_discovery_registers_ids_and_aliases(tmp_path):
     config_path = tmp_path / "nested" / "config.yaml"
     config_path.parent.mkdir()
     config_path.write_text(_fake_card_text(), encoding="utf-8")
-    cards = Registry("test model cards")
-    presets = Registry("test presets")
+    cards = Registry("test model cards", normalize_strings=True)
+    presets = Registry("test presets", normalize_strings=True)
 
     discovered = discover_model_cards(
         tmp_path, model_card_registry=cards, preset_registry=presets
     )
 
     assert discovered == ["Architecture/Fake"]
-    assert cards.get("Architecture/Fake") == config_path.resolve()
+    assert cards.get("architecture/fake") == config_path.resolve()
+    assert cards.get("architecture-fake") == config_path.resolve()
     assert presets.get("architecture-fake") == config_path.resolve()
 
 
-def test_from_preset_resolves_registered_card(monkeypatch, tmp_path):
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text(_fake_card_text(), encoding="utf-8")
-    monkeypatch.setitem(PRESET_REGISTRY._mapping, "architecture-fake", config_path)
-
-    config = AutoProteinConfig.from_preset("architecture-fake")
-
-    assert config["model_id"] == "Architecture/Fake"
-    assert config.get_streams()["input"].processor == "fake_processor"
+def test_builtin_alias_resolves_through_model_card_registry():
+    config = AutoProteinConfig.from_preset("drugban")
+    assert config["model_id"] == "DTI/DrugBAN"
 
 
-def test_auto_config_has_no_model_specific_preset_tables():
+def test_auto_source_has_no_model_specific_tables_or_names():
     auto_dir = Path(__file__).resolve().parents[1] / "auto"
-    source = "\n".join(
-        path.read_text(encoding="utf-8") for path in auto_dir.glob("*.py")
-    ).casefold()
+    source = "\n".join(path.read_text(encoding="utf-8") for path in auto_dir.glob("*.py")).casefold()
 
     assert "drugban" not in source
     assert "mapdiff" not in source
-    assert "multistreamproteinmodel" not in source
+    assert "dti/drugban" not in source
 
 
-def test_named_architectures_are_not_defined_in_shared_model_modules():
+def test_concrete_model_classes_live_only_in_examples():
     package = Path(__file__).resolve().parents[1]
-    shared_roots = [
-        package / "auto",
-        package / "fusion",
-        package / "heads",
-        package / "conditioners",
-    ]
-    shared_files = [path for root in shared_roots for path in root.glob("*.py")]
-    shared_files.extend((package / "modalities").glob("*/encoders.py"))
+    shared_files = list((package / "auto").rglob("*.py")) + list((package / "core").rglob("*.py"))
     source = "\n".join(path.read_text(encoding="utf-8") for path in shared_files)
 
-    assert "class DrugBAN" not in source
-    assert "class MapDiff" not in source
-    assert "drugban_molecule_gnn" not in source
-    assert "mapdiff_structure_encoder" not in source
+    assert "DrugBAN" not in source
+    assert "MapDiff" not in source
 
 
-def test_registered_alias_and_canonical_processor_resolution():
+def test_registered_preprocessor_alias_and_canonical_id():
     class FakeProcessor:
-        def __init__(self, input_key="default", marker=None):
+        default_input_key = "payload"
+
+        def __init__(self, input_key="payload", marker=None):
             self.input_key = input_key
             self.marker = marker
 
         def transform(self, sample):
             return {"value": sample[self.input_key], "marker": self.marker}
 
-    key = ("architecture_modality", "fake_processor")
-    MODALITY_PROCESSOR_REGISTRY.register(
-        key,
-        FakeProcessor,
-        aliases=(("architecture/input", "payload"),),
+    PREPROCESSOR_REGISTRY.register(
+        "architecture/fake", FakeProcessor, aliases=("architecture/input",)
     )
-
     aliased = AutoProteinPreprocessor("architecture/input", marker="alias")
-    canonical = AutoProteinPreprocessor(
-        "architecture_modality/fake_processor",
-        input_key="payload",
-        marker="canonical",
-    )
+    canonical = AutoProteinPreprocessor("architecture/fake", marker="canonical")
 
     assert aliased.featurize({"payload": 3}) == {"value": 3, "marker": "alias"}
-    assert canonical.featurize({"payload": 4}) == {
-        "value": 4,
-        "marker": "canonical",
-    }
+    assert canonical.featurize({"payload": 4}) == {"value": 4, "marker": "canonical"}
 
 
-def test_builtin_cards_are_bootstrapped_without_example_imports():
+def test_builtin_cards_are_discovered_without_importing_model_modules():
     import kale_protein
-    from kale_protein.registry import MODEL_CARD_REGISTRY
 
     source = Path(kale_protein.__file__).read_text(encoding="utf-8")
     assert ".examples" not in source
-    assert MODEL_CARD_REGISTRY.available_keys()
+    assert MODEL_CARD_REGISTRY.has("DTI/DrugBAN")
+    assert MODEL_CARD_REGISTRY.has("InverseFolding/MapDiff")
 
 
-def test_auto_map_card_modules_support_relative_imports(monkeypatch, tmp_path):
+def test_new_card_composes_registered_components_without_auto_changes(tmp_path):
+    class RelativeEmbedder:
+        def __init__(self, config=None, marker="embedded"):
+            self.marker = marker
+
+        def embed(self, value):
+            return f"{self.marker}:{value}"
+
+    class RelativePredictor:
+        def __init__(self, config=None, suffix="predicted"):
+            self.suffix = suffix
+
+        def __call__(self, value):
+            return f"{value}:{self.suffix}"
+
+    AutoProteinEmbedder.register("architecture/relative_embedder", RelativeEmbedder)
+    AutoProteinPredictor.register("architecture/relative_predictor", RelativePredictor)
+
     config_path = tmp_path / "config.yaml"
-    config_path.write_text(
-        """\
-model_id: Architecture/Relative
-task: fake_task
-objective: generative
-runner: generate
-auto_map:
-  AutoProteinConfig: configuration.RelativeConfig
-  AutoProteinModel: modeling.RelativeModel
-streams:
-  input:
-    modality: fake
-    input_key: value
-    processor: fake
-    encoder: fake
-head:
-  type: fake
-""",
-        encoding="utf-8",
-    )
-    (tmp_path / "configuration.py").write_text(
-        "from kale_protein.auto import AutoProteinConfig\n"
-        "class RelativeConfig(AutoProteinConfig):\n"
-        "    marker = 'relative'\n",
-        encoding="utf-8",
-    )
+    config_path.write_text(_fake_card_text("Architecture/Relative", "relative"), encoding="utf-8")
     (tmp_path / "modeling.py").write_text(
-        "from .configuration import RelativeConfig\n"
+        "from kale_protein.auto import AutoProteinEmbedder, AutoProteinPredictor\n"
         "class RelativeModel:\n"
         "    def __init__(self, config, pretrain=False):\n"
-        "        self.config_class = RelativeConfig\n"
-        "        self.pretrain = pretrain\n",
+        "        self.embedder = AutoProteinEmbedder.from_config(config.get_embedders()['input'], config=config)\n"
+        "        self.predictor = AutoProteinPredictor.from_config(config.get_predictor(), config=config)\n"
+        "        self.pretrain = pretrain\n"
+        "    def __call__(self, value):\n"
+        "        return self.predictor(self.embedder.embed(value))\n",
         encoding="utf-8",
     )
-    monkeypatch.setitem(
-        MODEL_CARD_REGISTRY._mapping, "Architecture/Relative", config_path
-    )
+    MODEL_CARD_REGISTRY.register("Architecture/Relative", config_path)
 
     model = AutoProteinModel("Architecture/Relative", pretrain=True)
 
-    assert model.config_class.marker == "relative"
+    assert model("payload") == "embedded:payload:predicted"
     assert model.pretrain is True

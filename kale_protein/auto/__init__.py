@@ -1,6 +1,19 @@
-from .config import AutoProteinConfig, StreamSpec
-from .auto_loader import AutoProteinData, AutoProteinDataLoader
-from .auto_preprocessor import AutoMoleculePreprocessor, AutoProteinPreprocessor
-from .auto_predictor import AutoProteinGenerator, AutoProteinModel, AutoProteinPredictor
-from .auto_evaluator import AutoProteinEvaluator
-from .auto_interpreter import AutoProteinInterpreter
+from .configuration import AutoProteinConfig
+from .data import AutoProteinData, AutoProteinDataLoader
+from .evaluation import AutoProteinEvaluator
+from .interpretation import AutoProteinInterpreter
+from .modeling import AutoProteinEmbedder, AutoProteinModel, AutoProteinPredictor
+from .preprocessing import AutoMoleculePreprocessor, AutoProteinPreprocessor
+
+__all__ = [
+    "AutoMoleculePreprocessor",
+    "AutoProteinConfig",
+    "AutoProteinData",
+    "AutoProteinDataLoader",
+    "AutoProteinEmbedder",
+    "AutoProteinEvaluator",
+    "AutoProteinInterpreter",
+    "AutoProteinModel",
+    "AutoProteinPredictor",
+    "AutoProteinPreprocessor",
+]

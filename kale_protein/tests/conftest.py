@@ -14,21 +14,18 @@ def fake_rdkit_graph(monkeypatch):
 
     import torch
 
-    from kale_protein.modalities.small_molecule.processors import RDKitGraphProcessor
+    from kale_protein.core.modalities.molecule.processors import RDKitGraphProcessor
 
     def transform(processor, sample):
         smiles = sample[processor.input_key]
         atom_count = max(1, min(len(smiles), processor.max_nodes or len(smiles)))
-        node_count = processor.max_nodes or atom_count
-        features = torch.zeros(node_count, 75)
-        features[:atom_count, 0] = 1.0
-        features[atom_count:, 74] = 1.0
-        mask = torch.zeros(node_count, dtype=torch.bool)
-        mask[:atom_count] = True
+        features = torch.zeros(atom_count, 74)
+        features[:, 0] = 1.0
+        mask = torch.ones(atom_count, dtype=torch.bool)
         return {
             "smiles": smiles,
             "node_features": features,
-            "adjacency": torch.eye(node_count),
+            "adjacency": torch.eye(atom_count),
             "node_mask": mask,
             "edge_index": torch.empty((2, 0), dtype=torch.long),
             "atom_symbols": ["C"] * atom_count,

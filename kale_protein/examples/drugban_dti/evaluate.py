@@ -12,12 +12,12 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from kale_protein.auto import AutoProteinConfig, AutoProteinPredictor, AutoProteinPreprocessor
+from kale_protein.auto import AutoProteinConfig, AutoProteinModel, AutoProteinPreprocessor
 from kale_protein.examples.drugban_dti._cli import (
     LazyPreprocessedDataset, add_data_arguments, load_dataset,
     load_requested_checkpoint, print_json, resolve_device, seed_everything,
 )
-from kale_protein.tasks.drug_target_interaction.metrics import compute_metrics
+from kale_protein.core.tasks.dti.metrics import compute_metrics
 
 
 def build_parser():
@@ -32,25 +32,31 @@ def build_parser():
 def main(argv=None):
     args = build_parser().parse_args(argv)
     seed_everything(args.seed)
+
+    # 1. Load and preprocess the held-out split.
     dataset = load_dataset(args)
     config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
     preprocessor = AutoProteinPreprocessor.from_config(config)
     processed = LazyPreprocessedDataset(dataset, preprocessor)
-    predictor = AutoProteinPredictor("DTI/DrugBAN", pretrain=args.pretrain)
-    predictor.to(resolve_device(args.device))
-    load_requested_checkpoint(predictor, args)
-    loader = predictor.make_dataloader(
+
+    # 2. Build the full model, load weights, and collate batches.
+    model = AutoProteinModel("DTI/DrugBAN", pretrain=args.pretrain)
+    model.to(resolve_device(args.device))
+    load_requested_checkpoint(model, args)
+    loader = model.make_dataloader(
         processed, batch_size=args.batch_size, num_workers=args.num_workers
     )
     probabilities = []
     labels = []
-    predictor.eval()
+    model.eval()
     with torch.no_grad():
         for batch in loader:
-            embeddings = predictor.embed_components(batch)
-            output = predictor(embeddings["target"], embeddings["drug"])
+            # 3. Embed protein and molecule streams, then predict interactions.
+            embeddings = model.embed(batch)
+            output = model.predictor(embeddings)
             probabilities.append(output["probabilities"].detach().cpu())
             labels.append(batch["label"].detach().cpu())
+    # 4. Compute evaluation-only metrics.
     metrics = compute_metrics(torch.cat(labels), torch.cat(probabilities), threshold=args.threshold)
     print_json(metrics)
     return metrics

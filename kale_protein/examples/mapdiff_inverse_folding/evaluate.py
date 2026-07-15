@@ -7,8 +7,8 @@ from pathlib import Path
 import torch
 
 from kale_protein.auto import AutoProteinData, AutoProteinModel, AutoProteinPreprocessor
-from kale_protein.tasks.inverse_folding.collators import CollatorDiff
-from kale_protein.tasks.inverse_folding.metrics import Diversity, Perplexity, SequenceRecovery
+from kale_protein.core.tasks.inverse_folding.collators import CollatorDiff
+from kale_protein.core.tasks.inverse_folding.metrics import Diversity, Perplexity, SequenceRecovery
 
 
 def build_parser():
@@ -28,15 +28,29 @@ def build_parser():
 def main(argv=None):
     args = build_parser().parse_args(argv)
     torch.manual_seed(args.seed)
+
+    # 1. Load, preprocess, and collate evaluation structures.
     dataset = AutoProteinData("InverseFolding/CATH", source=args.data)
     preprocessor = AutoProteinPreprocessor("protein/structure")
     processed_graphs = [preprocessor.featurize(record)["graph"] for record in dataset]
     batch = CollatorDiff()(processed_graphs).to(args.device)
+    # 2. Build one complete model and load the selected checkpoint.
     model = AutoProteinModel("InverseFolding/MapDiff", pretrain=args.pretrained).to(args.device)
     if args.checkpoint:
         model.load_compatible_checkpoint(args.checkpoint)
     model.eval()
-    output = model.sample(batch, {"steps": args.steps, "method": args.method, "num_samples": args.num_samples})
+
+    # 3. Encode structural conditions and generate sequences.
+    conditioning = model.embed(batch)
+    output = model.predictor.generate(
+        conditioning,
+        sampling_config={
+            "steps": args.steps,
+            "method": args.method,
+            "num_samples": args.num_samples,
+        },
+    )
+    # 4. Evaluate generation quality.
     metrics = {
         "sequence_recovery": SequenceRecovery()(output, batch.graph.sequences),
         "perplexity": Perplexity()(output, batch.graph.sequences),

@@ -3,11 +3,9 @@ model_type: mapdiff
 name: mapdiff
 task: inverse_folding
 objective: generative
-runner: diffusion_generate
 auto_map:
   AutoProteinConfig: configuration.MapDiffConfig
   AutoProteinModel: modeling.MapDiffModel
-  AutoProteinGenerator: modeling.MapDiffGenerator
 pretrained:
   local_dir: weights
   filename: mapdiff_weight.pt
@@ -57,32 +55,24 @@ diffusion:
   mask_ratio_deviation: 0.25
 streams:
   structure:
-    modality: protein_structure
+    modality: structure
     input_key: backbone_coords
-    processor: backbone_coordinate_processor
-    encoder: mapdiff_structure_encoder
+    processor: backbone
     processor_kwargs: {}
-    encoder_kwargs:
-      hidden_dim: 128
   noisy_sequence:
-    modality: protein_sequence
+    modality: sequence
     input_key: sequence
-    processor: masked_sequence_tokenizer
-    encoder: residue_token_embedding
+    processor: masked
     processor_kwargs:
       max_length: 512
-      mask_token: <mask>
-    encoder_kwargs:
-      hidden_dim: 128
-conditioner:
-  type: structure_conditioned_denoising
-  kwargs:
-    hidden_dim: 128
-head:
-  type: diffusion_sequence_decoder
-  kwargs:
-    hidden_dim: 128
-    vocab_size: 25
+components:
+  embedders:
+    structure:
+      id: structure/mapdiff_condition
+      kwargs: {}
+  predictor:
+    id: inverse_folding/mapdiff_generator
+    kwargs: {}
 sampling:
   steps: 25
   method: ddim

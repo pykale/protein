@@ -4,14 +4,14 @@ import math
 import pytest
 import torch
 
-from kale_protein.auto import AutoProteinConfig, AutoProteinGenerator, AutoProteinModel
-from kale_protein.examples.mapdiff_inverse_folding.modeling import MapDiffGenerator, MapDiffModel
+from kale_protein.auto import AutoProteinConfig, AutoProteinModel
+from kale_protein.examples.mapdiff_inverse_folding.modeling import MapDiffModel
 from kale_protein.examples.mapdiff_inverse_folding.upstream_compat import UpstreamMapDiff
-from kale_protein.modalities.protein_structure.processors import BackboneCoordinateProcessor
-from kale_protein.tasks.inverse_folding.collators import CollatorDiff, CollatorIPAPretrain
-from kale_protein.tasks.inverse_folding.datasets import CATHGraphDataset, build_residue_graph
-from kale_protein.tasks.inverse_folding.interpreters import DenoisingTrajectoryInterpreter
-from kale_protein.tasks.inverse_folding.metrics import Diversity, Perplexity, SequenceRecovery
+from kale_protein.core.modalities.structure.processors import BackboneCoordinateProcessor
+from kale_protein.core.tasks.inverse_folding.collators import CollatorDiff, CollatorIPAPretrain
+from kale_protein.core.tasks.inverse_folding.datasets import CATHGraphDataset, build_residue_graph
+from kale_protein.core.tasks.inverse_folding.interpreters import DenoisingTrajectoryInterpreter
+from kale_protein.core.tasks.inverse_folding.metrics import Diversity, Perplexity, SequenceRecovery
 
 
 def _coords(length=4, shift=0.0):
@@ -34,16 +34,20 @@ def _tiny_config(tmp_path=None, filename="weights.pt"):
         "model_id": "InverseFolding/MapDiffTiny",
         "task": "inverse_folding",
         "objective": "generative",
-        "runner": "diffusion_generate",
+        "auto_map": {"AutoProteinModel": "modeling.MapDiffModel"},
         "streams": {
             "structure": {
-                "modality": "protein_structure",
+                "modality": "structure",
                 "input_key": "backbone_coords",
-                "processor": "backbone_coordinate_processor",
-                "encoder": "mapdiff_structure_encoder",
+                "processor": "backbone",
             }
         },
-        "head": {"type": "diffusion_sequence_decoder"},
+        "components": {
+            "embedders": {
+                "structure": {"id": "structure/mapdiff_condition", "kwargs": {}}
+            },
+            "predictor": {"id": "inverse_folding/mapdiff_generator", "kwargs": {}},
+        },
         "sampling": {"steps": 3, "method": "ddim", "num_samples": 1},
         "model": {
             "hidden_dim": 24,
@@ -145,6 +149,8 @@ def test_both_mapdiff_collators_are_functional():
 def test_tiny_optimizer_step_and_iterative_sampling():
     torch.manual_seed(11)
     model = MapDiffModel(_tiny_config(), pretrain=False)
+    assert len(model.state_dict()) == len(model.network.state_dict())
+    assert all(key.startswith("predictor.network.") for key in model.state_dict())
     batch = CollatorDiff()(_graphs())
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     before = model.network.denoiser.output[-1].weight.detach().clone()
@@ -163,6 +169,24 @@ def test_tiny_optimizer_step_and_iterative_sampling():
     interpreted = DenoisingTrajectoryInterpreter().explain(sampled)
     assert interpreted["steps"] == 3
     assert interpreted["final_sequences"] == sampled["trajectory"][-1]["sequences"]
+
+
+def test_generator_consumes_precomputed_structure_condition(monkeypatch):
+    model = MapDiffModel(_tiny_config(), pretrain=False)
+    batch = CollatorDiff()([_graphs()[0]])
+    encoded = model.embed(batch)
+    original_forward = model.network.forward
+    seen = []
+
+    def recording_forward(value, conditioning=None):
+        seen.append(conditioning)
+        return original_forward(value, conditioning=conditioning)
+
+    monkeypatch.setattr(model.network, "forward", recording_forward)
+    model.predictor(encoded)
+
+    assert len(seen) == 1
+    assert seen[0] is encoded["conditioning"]
 
 
 def test_inverse_folding_metrics_use_sequences_and_logits():
@@ -221,9 +245,8 @@ def test_configured_release_url_selects_exact_embedded_profile():
 
 def test_auto_direct_style_and_workflow_modules_are_import_safe():
     model = AutoProteinModel("InverseFolding/MapDiff", pretrain=False)
-    generator = AutoProteinGenerator("InverseFolding/MapDiff", pretrain=False)
     batch = CollatorDiff()([_graphs()[0]])
-    output = generator.generate(model.embed(batch), steps=2, num_samples=1)
+    output = model.predictor.generate(model.embed(batch), steps=2, num_samples=1)
     assert output["sequences"] and output["trajectory"]
 
     for module_name in ("pretrain_ipa", "train_diffusion", "evaluate", "generate"):
@@ -243,12 +266,8 @@ def test_all_workflow_mains_run_with_fake_graph_and_tiny_model(monkeypatch, tmp_
     def tiny_model(*args, **kwargs):
         return MapDiffModel(_tiny_config(), pretrain=False)
 
-    def tiny_generator(*args, **kwargs):
-        return MapDiffGenerator(_tiny_config(), pretrain=False)
-
     for module in modules.values():
         monkeypatch.setattr(module, "AutoProteinModel", tiny_model)
-    monkeypatch.setattr(modules["generate"], "AutoProteinGenerator", tiny_generator)
 
     ipa_path = tmp_path / "ipa.pt"
     diffusion_path = tmp_path / "diffusion.pt"

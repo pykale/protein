@@ -89,18 +89,23 @@ class EGNNSequenceDenoiser(nn.Module):
             dim=-1,
         )
 
-    def encode(self, graph, noisy_x, timesteps):
+    def encode_condition(self, graph):
+        return self.geometry_projection(self._backbone_geometry(graph.atom_pos))
+
+    def encode(self, graph, noisy_x, timesteps, conditioning=None):
         if timesteps.ndim == 1:
             timesteps = timesteps[:, None]
         node_time = timesteps[graph.batch]
         hidden = self.sequence_projection(noisy_x)
-        hidden = hidden + self.geometry_projection(self._backbone_geometry(graph.atom_pos))
+        hidden = hidden + (
+            self.encode_condition(graph) if conditioning is None else conditioning
+        )
         hidden = hidden + self.time_projection(sinusoidal_timestep_embedding(node_time, self.hidden_dim))
         coords = graph.pos
         for layer in self.layers:
             hidden, coords = layer(hidden, coords, graph.edge_index, graph.edge_attr)
         return hidden, coords
 
-    def forward(self, graph, noisy_x, timesteps):
-        hidden, _ = self.encode(graph, noisy_x, timesteps)
+    def forward(self, graph, noisy_x, timesteps, conditioning=None):
+        hidden, _ = self.encode(graph, noisy_x, timesteps, conditioning=conditioning)
         return self.output(hidden)

@@ -40,3 +40,16 @@ def test_base_import_and_dti_data_do_not_require_model_dependencies(tmp_path):
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_repository_uses_auto_core_examples_layers_only():
+    package = Path(__file__).resolve().parents[1]
+    assert (package / "auto" / "modeling.py").is_file()
+    assert (package / "core" / "registry").is_dir()
+    assert (package / "core" / "modalities" / "sequence").is_dir()
+    assert (package / "core" / "tasks" / "dti").is_dir()
+    assert (package / "examples" / "drugban_dti" / "modeling.py").is_file()
+    assert (package / "examples" / "mapdiff_inverse_folding" / "modeling.py").is_file()
+
+    for legacy in ("registry", "modalities", "tasks", "fusion", "heads", "runners", "conditioners"):
+        assert not any((package / legacy).glob("*.py"))

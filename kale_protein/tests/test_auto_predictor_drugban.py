@@ -1,7 +1,14 @@
-from kale_protein.auto import AutoProteinConfig, AutoProteinPreprocessor, AutoProteinPredictor
+from kale_protein.auto import AutoProteinConfig, AutoProteinModel, AutoProteinPreprocessor
 
-def test_drugban_predictor_predicts(fake_rdkit_graph):
-    cfg=AutoProteinConfig.from_preset('drugban')
-    data=AutoProteinPreprocessor.from_config(cfg).transform_sample({'smiles':'CCO','sequence':'MKTFFVLLL','label':1})
-    out=AutoProteinPredictor.from_config(cfg).predict(data)
-    assert 'logits' in out and 'probabilities' in out
+
+def test_drugban_complete_model_predicts(fake_rdkit_graph):
+    config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
+    sample = AutoProteinPreprocessor.from_config(config).transform_sample(
+        {"smiles": "CCO", "sequence": "MKTFFVLLLMKTFFVLLL", "label": 1}
+    )
+    model = AutoProteinModel("DTI/DrugBAN", pretrain=False)
+    output = model.predict(sample)
+
+    assert "logits" in output and "probabilities" in output
+    assert model.protein_embedder is not model.molecule_embedder
+    assert model.predictor is not model.protein_embedder

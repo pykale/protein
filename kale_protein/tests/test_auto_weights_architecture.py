@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from kale_protein.auto.weights import (
+from kale_protein.core.weights import (
     extract_checkpoint_state_dict,
     load_checkpoint_state_dict,
     resolve_pretrained_weight,

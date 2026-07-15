@@ -1,5 +1,5 @@
 import pytest
-from kale_protein.registry.base import Registry
+from kale_protein.core.registry.base import Registry
 
 def test_registry_register_get_available_and_missing():
     r=Registry('thing')
@@ -14,3 +14,9 @@ def test_registry_decorator():
     @r.register(('x','y'))
     class B: pass
     assert r.get(('x','y')) is B
+
+
+def test_namespaced_registry_resolves_case_insensitive_aliases():
+    registry = Registry("component", normalize_strings=True)
+    registry.register("sequence/cnn", object(), aliases=("Protein/CNN",))
+    assert registry.get("protein/cnn") is registry.get("SEQUENCE/CNN")
