@@ -11,7 +11,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from kale_protein.auto import (
-    AutoProteinConfig, AutoProteinInterpreter, AutoProteinPredictor,
+    AutoProteinConfig, AutoProteinInterpreter, AutoProteinModel,
     AutoProteinPreprocessor,
 )
 from kale_protein.examples.drugban_dti._cli import (
@@ -31,22 +31,26 @@ def build_parser():
 def main(argv=None):
     args = build_parser().parse_args(argv)
     seed_everything(args.seed)
+
+    # 1. Load and preprocess labeled or unlabeled pairs.
     dataset = load_dataset(args)
     config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
     preprocessor = AutoProteinPreprocessor.from_config(config)
     processed = LazyPreprocessedDataset(dataset, preprocessor)
-    predictor = AutoProteinPredictor("DTI/DrugBAN", pretrain=args.pretrain)
-    predictor.to(resolve_device(args.device))
-    load_requested_checkpoint(predictor, args)
-    loader = predictor.make_dataloader(
+    # 2. Build the complete model and load weights.
+    model = AutoProteinModel("DTI/DrugBAN", pretrain=args.pretrain)
+    model.to(resolve_device(args.device))
+    load_requested_checkpoint(model, args)
+    loader = model.make_dataloader(
         processed, batch_size=args.batch_size, num_workers=args.num_workers
     )
     interpreter = AutoProteinInterpreter.from_config(config)
     samples = []
     for batch in loader:
-        embeddings = predictor.embed_components(batch)
-        predictor(embeddings["target"], embeddings["drug"])
-        samples.extend(interpreter.explain(predictor, batch)["samples"])
+        # 3. Embed and predict before optional attention interpretation.
+        embeddings = model.embed(batch)
+        output = model.predictor(embeddings)
+        samples.extend(interpreter.explain(model, batch, output=output)["samples"])
     result = {"samples": samples}
     print_json(result)
     return result

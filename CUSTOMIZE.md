@@ -1,20 +1,16 @@
 # Extending KaleProtein
 
-KaleProtein separates reusable data and modality behavior from named model
-implementations. The public pipeline remains explicit:
+KaleProtein separates generic Auto dispatch, reusable core components, and
+complete named models. Adding a model normally changes only one model-card
+directory.
 
-```text
-load -> preprocess -> collate -> embed/model -> predict or generate -> evaluate -> interpret
-```
+## Add Reusable Data
 
-## Add a Dataset
-
-Register task-level loaders with `DATASET_REGISTRY`. A loader should normalize
-records to stable task fields and accept paths or options as ordinary keyword
-arguments.
+Task datasets belong in `core/tasks/<task>/datasets.py` and register a stable
+id:
 
 ```python
-from kale_protein.registry import DATASET_REGISTRY
+from kale_protein.core.registry import DATASET_REGISTRY
 
 
 @DATASET_REGISTRY.register("DTI/MyDataset")
@@ -22,31 +18,30 @@ def load_my_dataset(path, split="train"):
     return MyDataset(path=path, split=split)
 ```
 
-It is then available to every model for that task:
+Every compatible model can then use:
 
 ```python
-from kale_protein.auto import AutoProteinData
-
 data = AutoProteinData("DTI/MyDataset", path="data.csv", split="test")
 ```
 
-Dataset code must not import a particular model card. Pair construction, split
-semantics, labels, and task metadata belong here; neural featurization does not.
+Dataset loaders should normalize task fields and preserve provenance. They
+must not import a concrete model.
 
-## Add a Reusable Preprocessor
+## Add A Reusable Preprocessor
 
-Processors own one modality and register a canonical key plus optional friendly
-aliases.
+Modality processors belong in `core/modalities/<modality>/processors.py`:
 
 ```python
-from kale_protein.registry import MODALITY_PROCESSOR_REGISTRY
+from kale_protein.core.registry import PREPROCESSOR_REGISTRY
 
 
-@MODALITY_PROCESSOR_REGISTRY.register(
-    ("protein_sequence", "my_tokenizer"),
-    aliases=(("protein/my_sequence", "sequence"),),
+@PREPROCESSOR_REGISTRY.register(
+    "sequence/my_tokenizer",
+    aliases=("protein/my_sequence",),
 )
 class MyTokenizer:
+    default_input_key = "sequence"
+
     def __init__(self, input_key="sequence", max_length=None):
         self.input_key = input_key
         self.max_length = max_length
@@ -58,17 +53,44 @@ class MyTokenizer:
         return {"sequence": sequence, "tokens": encode(sequence)}
 ```
 
+## Add Reusable Model Components
+
+Reusable modality encoders register as embedders. Reusable task fusion and
+heads register as predictors:
+
 ```python
-processor = AutoProteinPreprocessor("protein/my_sequence", max_length=512)
-tokens = processor.tokenize({"sequence": "MKT..."})
+from torch import nn
+
+from kale_protein.auto import AutoProteinEmbedder, AutoProteinPredictor
+
+
+@AutoProteinEmbedder.register("sequence/my_encoder")
+class MySequenceEncoder(nn.Module):
+    def __init__(self, config=None, hidden_dim=128):
+        super().__init__()
+        self.encoder = build_encoder(hidden_dim)
+
+    def embed(self, batch):
+        return {"embedding": self.encoder(batch["tokens"]), "mask": batch["mask"]}
+
+
+@AutoProteinPredictor.register("classification/my_head")
+class MyClassificationHead(nn.Module):
+    def __init__(self, config=None, hidden_dim=128, classes=2):
+        super().__init__()
+        self.output = nn.Linear(hidden_dim, classes)
+
+    def forward(self, embeddings):
+        return {"logits": self.output(embeddings["embedding"])}
 ```
 
-A modality processor must not read another stream or construct a complete model
-batch. Cross-stream collation belongs to task or model-card code.
+Put a component in core only when it is genuinely useful to more than one
+named model. Model-specific layers can register from the example's
+`modeling.py` instead.
 
-## Add a Model Card
+## Add A Complete Model Card
 
-Named model definitions belong together in one self-contained directory:
+Use the same simple layout for every model:
 
 ```text
 kale_protein/examples/my_model/
@@ -82,25 +104,18 @@ kale_protein/examples/my_model/
   weights/
 ```
 
-The entry files use the same names across model cards. Supporting layer modules
-may sit beside `modeling.py` when an architecture is large.
-
 ### Configuration
-
-Declare a globally unique `model_id` and map Auto APIs to card-local classes:
 
 ```yaml
 model_id: MyTask/MyModel
 model_type: my_model
 name: my_model
-task: my_task
+task: classification
 objective: discriminative
-runner: predict
 
 auto_map:
   AutoProteinConfig: configuration.MyModelConfig
   AutoProteinModel: modeling.MyModel
-  AutoProteinPredictor: modeling.MyPredictor
 
 pretrained:
   local_dir: weights
@@ -109,22 +124,26 @@ pretrained:
 
 streams:
   sequence:
-    modality: protein_sequence
+    modality: sequence
     input_key: sequence
     processor: my_tokenizer
-    encoder: my_sequence_encoder
+    processor_kwargs:
+      max_length: 512
 
-fusion:
-  type: model_owned
-head:
-  type: model_owned
+components:
+  embedders:
+    sequence:
+      id: sequence/my_encoder
+      kwargs:
+        hidden_dim: 128
+  predictor:
+    id: classification/my_head
+    kwargs:
+      hidden_dim: 128
+      classes: 2
 ```
 
-The `encoder`, `fusion`, and `head` fields describe the card for inspection; they
-do not require named architecture classes to be registered in the shared Auto
-layer. `modeling.py` constructs the real learnable network.
-
-### Configuration class
+### Configuration Class
 
 ```python
 from kale_protein.auto import AutoProteinConfig
@@ -134,99 +153,76 @@ class MyModelConfig(AutoProteinConfig):
     model_type = "my_model"
 ```
 
-### Model classes
+### Complete Model
+
+The full model is the composition root and sole full-checkpoint owner:
 
 ```python
 from torch import nn
 
+from kale_protein.auto import AutoProteinEmbedder, AutoProteinPredictor
+from kale_protein.core.weights import load_checkpoint_state_dict, resolve_pretrained_weight
+
 
 class MyModel(nn.Module):
-    config_class = MyModelConfig
-
     def __init__(self, config, pretrain=False):
         super().__init__()
         self.config = config
-        self.network = build_network(config)
+        self.embedder = AutoProteinEmbedder.from_config(
+            config.get_embedders()["sequence"], config=config
+        )
+        self.predictor = AutoProteinPredictor.from_config(
+            config.get_predictor(), config=config
+        )
         if pretrain:
-            self.load_pretrained(config)
+            path = resolve_pretrained_weight(config)
+            state = load_checkpoint_state_dict(path)
+            self.load_state_dict(adapt_checkpoint_keys(state), strict=True)
 
-    def embed(self, processed):
-        return self.network.encode(processed)
+    def embed(self, batch):
+        return self.embedder.embed(batch)
 
-
-class MyPredictor(nn.Module):
-    config_class = MyModelConfig
-
-    def __init__(self, config, pretrain=False):
-        super().__init__()
-        self.model = MyModel(config, pretrain=pretrain)
-
-    def forward(self, embeddings):
-        return self.model.predict(embeddings)
+    def forward(self, batch):
+        return self.predictor(self.embed(batch))
 ```
 
-The exact component API should fit the task. A multimodal card may expose
-separate embedders; a generative card should map `AutoProteinGenerator` and
-provide `generate()`.
+For a generative model, the predictor implements `generate()` and the full
+model may expose a convenience `generate()` method. Do not add a second Auto
+class that constructs another complete generator model.
 
-## Register a Card
+## Register An External Card
 
-Bundled cards under `kale_protein/` are discovered from their `config.yaml`
-metadata. External cards can be registered without editing Auto code:
+Bundled cards are discovered from `config.yaml`. Register an external card
+without editing Auto:
 
 ```python
-from kale_protein.registry import register_model_card
+from kale_protein.core.registry import register_model_card
 
 register_model_card("path/to/my_model/config.yaml")
 model = AutoProteinModel("MyTask/MyModel")
 ```
 
-Do not add model IDs, model-name branches, or architecture dictionaries to
-`kale_protein.auto`.
+Never add model ids, model-name branches, or architecture tables to `auto/`.
 
-## Pretrained Weights
+## Checkpoints
 
-Use the generic helpers from `kale_protein.auto.weights` to resolve assets and
-extract common checkpoint containers:
+Use `core.weights` for local-first resolution, optional checksum verification,
+atomic downloads, and common checkpoint extraction. Keep key conversion in the
+model card and require strict loading. Nested embedders and predictors should
+not independently resolve the complete model checkpoint.
 
-```python
-from kale_protein.auto.weights import (
-    load_pretrained_state_dict,
-    resolve_pretrained_weight,
-)
+## Scripts And Tests
 
-path = resolve_pretrained_weight(config)
-state_dict = load_pretrained_state_dict(config)
-model.load_state_dict(state_dict, strict=True)
+Each runnable script should show its real stages directly:
+
+```text
+load -> preprocess -> collate -> embed -> train/predict/generate -> metric/interpret
 ```
 
-Keep architecture-specific key conversion in the model card. Never use
-`strict=False` merely to make an unrelated released checkpoint appear to load.
-
-## Workflow Scripts
-
-Provide separate, import-safe scripts with `main(argv=None)` and a main guard.
-Each script should show its own real stages directly. For example, evaluation
-loads held-out data, preprocesses and collates it, embeds inputs, predicts, and
-computes metrics. It should not invoke a generic workflow wrapper or perform a
-training loop.
-
-## Tests
-
-Use tiny temporary files, fake URLs/downloaders, fake chemistry objects, and
-small model dimensions. Cover the boundaries rather than downloading large
-assets:
-
-- dynamic `auto_map` dispatch
-- preprocessing and collation schemas
-- one optimizer step changes a parameter
-- checkpoint round trips and incompatibility errors
-- known metric values
-- iterative generation trajectories
-- script import safety
-- absence of upstream runtime imports
-
-Run:
+Tests should use temporary files, fake URLs and downloaders, tiny tensors, and
+small model dimensions. Cover component construction, one optimizer step,
+checkpoint round trips, incompatible checkpoints, metrics, generation, and
+script import safety.
 
 ```bash
 python -m pytest -q

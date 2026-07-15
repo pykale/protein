@@ -13,7 +13,7 @@ if str(ROOT) not in sys.path:
 from kale_protein.auto import (
     AutoProteinConfig,
     AutoProteinData,
-    AutoProteinPredictor,
+    AutoProteinModel,
     AutoProteinPreprocessor,
 )
 from kale_protein.examples.drugban_dti._cli import (
@@ -39,13 +39,17 @@ def build_parser():
 def main(argv=None):
     args = build_parser().parse_args(argv)
     seed_everything(args.seed)
+
+    # 1. Load and preprocess task data.
     dataset = load_dataset(args)
     config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
     preprocessor = AutoProteinPreprocessor.from_config(config)
     processed = LazyPreprocessedDataset(dataset, preprocessor)
-    predictor = AutoProteinPredictor("DTI/DrugBAN", pretrain=args.pretrain)
-    predictor.to(resolve_device(args.device))
-    loader = predictor.make_dataloader(
+
+    # 2. Build the complete model and collate training batches.
+    model = AutoProteinModel("DTI/DrugBAN", pretrain=args.pretrain)
+    model.to(resolve_device(args.device))
+    loader = model.make_dataloader(
         processed,
         batch_size=args.batch_size,
         shuffle=True,
@@ -65,12 +69,16 @@ def main(argv=None):
         )
         validation = LazyPreprocessedDataset(validation_data, preprocessor)
     first_batch = next(iter(loader))
-    embeddings = predictor.embed_components(first_batch)
-    result = predictor.fit(
+
+    # 3. Exercise the explicit embedding stage before optimization.
+    embeddings = model.embed(first_batch)
+
+    # 4. Train, validate, and save the full model checkpoint.
+    result = model.fit(
         loader, valid_data=validation, epochs=args.epochs, learning_rate=args.learning_rate,
         batch_size=args.batch_size,
     )
-    predictor.save_checkpoint(args.checkpoint, extra={"training": result})
+    model.save_checkpoint(args.checkpoint, extra={"training": result})
     print_json({
         "checkpoint": str(args.checkpoint),
         "training": result,

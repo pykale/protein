@@ -1,58 +1,59 @@
 model_id: DTI/DrugBAN
 model_type: drugban
 name: drugban
-task: drug_target_interaction
+task: dti
 objective: discriminative
-runner: predict
 auto_map:
   AutoProteinConfig: configuration.DrugBANConfig
   AutoProteinModel: modeling.DrugBANModel
-  AutoProteinPredictor: modeling.DrugBANInteractionPredictor
 pretrained:
   local_dir: weights
   filename: drugban.pt
   url: ""
 streams:
   drug:
-    modality: small_molecule
+    modality: molecule
     input_key: smiles
     processor: rdkit_graph
-    encoder: molecular_gcn
     processor_kwargs:
       max_nodes: 290
-    encoder_kwargs: {}
   target:
-    modality: protein_sequence
+    modality: sequence
     input_key: sequence
-    processor: amino_acid_tokenizer
-    encoder: protein_cnn
+    processor: amino_acid
     processor_kwargs:
       max_length: 1000
-    encoder_kwargs: {}
-fusion:
-  type: ban
-  kwargs: {}
-head:
-  type: mlp_decoder
-  kwargs: {}
-drugban:
-  atom_feature_dim: 75
-  molecule_embedding_dim: 128
-  molecule_hidden_dim: 128
-  molecule_layers: 3
-  protein_vocab_size: 26
-  protein_embedding_dim: 128
-  protein_filter_dim: 128
-  protein_kernel_1: 3
-  protein_kernel_2: 6
-  protein_kernel_3: 9
-  ban_hidden_dim: 256
-  ban_heads: 2
-  ban_k: 3
-  ban_dropout: 0.2
-  decoder_hidden_dim: 512
-  decoder_output_dim: 128
-  decoder_binary_dim: 1
+components:
+  embedders:
+    drug:
+      id: molecule/gcn
+      kwargs:
+        in_feats: 75
+        embedding_dim: 128
+        hidden_dim: 128
+        layers: 3
+    target:
+      id: sequence/cnn
+      kwargs:
+        vocab_size: 26
+        embedding_dim: 128
+        filter_dim: 128
+        kernels:
+          - 3
+          - 6
+          - 9
+  predictor:
+    id: dti/ban
+    kwargs:
+      molecule_dim: 128
+      protein_dim: 128
+      hidden_dim: 256
+      heads: 2
+      k: 3
+      dropout: 0.2
+      decoder_hidden_dim: 512
+      decoder_output_dim: 128
+      binary_dim: 1
 training:
   batch_size: 64
   epochs: 100

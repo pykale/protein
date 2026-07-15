@@ -8,11 +8,10 @@ import torch
 
 from kale_protein.auto import (
     AutoProteinData,
-    AutoProteinGenerator,
     AutoProteinModel,
     AutoProteinPreprocessor,
 )
-from kale_protein.tasks.inverse_folding.collators import CollatorDiff
+from kale_protein.core.tasks.inverse_folding.collators import CollatorDiff
 
 
 def build_parser():
@@ -34,23 +33,26 @@ def build_parser():
 def main(argv=None):
     args = build_parser().parse_args(argv)
     torch.manual_seed(args.seed)
+
+    # 1. Load, preprocess, and collate input structures.
     dataset = AutoProteinData("InverseFolding/CATH", source=args.input)
     preprocessor = AutoProteinPreprocessor("protein/structure")
     processed_graphs = [preprocessor.featurize(record)["graph"] for record in dataset]
     batch = CollatorDiff()(processed_graphs).to(args.device)
-    encoder = AutoProteinModel("InverseFolding/MapDiff", pretrain=args.pretrained).to(args.device)
-    generator = AutoProteinGenerator("InverseFolding/MapDiff", pretrain=args.pretrained).to(args.device)
+    # 2. Build one complete model and load the selected checkpoint.
+    model = AutoProteinModel("InverseFolding/MapDiff", pretrain=args.pretrained).to(args.device)
     if args.checkpoint:
-        encoder.load_compatible_checkpoint(args.checkpoint)
-        generator.model.load_compatible_checkpoint(args.checkpoint)
-    conditioning = encoder.embed(batch)
-    output = generator.generate(
+        model.load_compatible_checkpoint(args.checkpoint)
+    # 3. Encode the condition and run the registered generator.
+    conditioning = model.embed(batch)
+    output = model.predictor.generate(
         conditioning,
         steps=args.steps,
         method=args.method,
         num_samples=args.num_samples,
         temperature=args.temperature,
     )
+    # 4. Serialize generated sequences and their denoising trajectory.
     serializable = {"sequences": output["sequences"], "trajectory": output["trajectory"]}
     text = json.dumps(serializable, indent=2)
     if args.output:

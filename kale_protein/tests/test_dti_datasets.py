@@ -1,7 +1,7 @@
 import pytest
 
 from kale_protein.auto import AutoProteinData
-from kale_protein.tasks.drug_target_interaction.datasets import DrugTargetInteractionDataset
+from kale_protein.core.tasks.dti.datasets import DrugTargetInteractionDataset
 
 
 def test_bindingdb_full_loader_normalizes_drugban_columns(tmp_path):

@@ -15,7 +15,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from kale_protein.tasks.inverse_folding.datasets import AA_ALPHABET, DiffusionBatch, IPABatch
+from kale_protein.core.tasks.inverse_folding.datasets import AA_ALPHABET, DiffusionBatch, IPABatch
 
 
 UPSTREAM_ALPHABET = "ARNDCQEGHILKMFPSTWYV"
@@ -697,8 +697,8 @@ class UpstreamMapDiff(nn.Module):
         fused = weights[0, :, None] * base_logits + weights[1, :, None] * prior_logits
         return fused, base_logits, prior_logits, padded_node_mask
 
-    def forward(self, batch: DiffusionBatch):
-        prepared = self.feature_adapter(batch)
+    def forward(self, batch: DiffusionBatch, prepared=None):
+        prepared = self.feature_adapter(batch) if prepared is None else prepared
         target_x = to_upstream_order(batch.graph.x)
         graph_t = torch.randint(0, self.timesteps + 1, (batch.graph.num_graphs,), device=target_x.device)
         noisy = self._q_sample(target_x, graph_t[batch.graph.batch])
@@ -726,8 +726,8 @@ class UpstreamMapDiff(nn.Module):
         selected = (ipa.x_mask > 0) & ipa.x_pad
         return {"loss": F.cross_entropy(logits[selected], labels[selected]), "logits": to_standard_order(logits)}
 
-    def embed(self, batch):
-        prepared = self.feature_adapter(batch)
+    def embed(self, batch, prepared=None):
+        prepared = self.feature_adapter(batch) if prepared is None else prepared
         graph_view = prepared[0]
         graph_view.x = to_upstream_order(batch.graph.x.new_zeros(batch.graph.x.shape))
         timestep = torch.zeros(batch.graph.num_graphs, 1, device=batch.graph.x.device)
@@ -758,10 +758,18 @@ class UpstreamMapDiff(nn.Module):
         return probability / probability.sum(dim=-1, keepdim=True).clamp_min(1e-8)
 
     @torch.no_grad()
-    def sample(self, batch, steps=100, method="ddim", temperature=1.0, num_samples=1):
+    def sample(
+        self,
+        batch,
+        steps=100,
+        method="ddim",
+        temperature=1.0,
+        num_samples=1,
+        prepared=None,
+    ):
         if method not in {"ddim", "ddpm"}:
             raise ValueError("sampling method must be 'ddim' or 'ddpm'.")
-        prepared = self.feature_adapter(batch)
+        prepared = self.feature_adapter(batch) if prepared is None else prepared
         schedule = torch.linspace(self.timesteps, 0, min(steps, self.timesteps) + 1, device=batch.graph.x.device)
         schedule = torch.unique_consecutive(schedule.round().long())
         all_sequences, all_trajectories = [], []

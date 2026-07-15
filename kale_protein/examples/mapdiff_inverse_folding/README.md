@@ -1,86 +1,143 @@
 # MapDiff Inverse Folding
 
-This card provides two self-contained PyTorch architectures:
+This model card contains a self-contained PyTorch MapDiff refactor. It supports
+both the published v1.0.1 checkpoint layout and a smaller architecture for
+local training and tests, without importing the upstream checkout at runtime.
 
-- `upstream-mapdiff-v1` exactly matches the published MapDiff v1.0.1 release
-  checkpoint: 464 state entries and 14,821,937 tensor elements under `model`,
-  `prior_model`, and `noise_schedule`.
-- `kale-mapdiff-v1` is the smaller refactor used for quick training, tests, and
-  local architectural experiments.
+## Card Layout
 
-Neither path imports the upstream checkout at runtime. The release-compatible
-EGNN replaces PyG message aggregation and graph normalization with equivalent
-plain-PyTorch operations; IPA reshapes are implemented without `einops`.
-
-## Attribution
-
-The MapDiff architecture and adapted code are copyright 2024 Peizhen Bai and
-used under the MIT License from
-[peizhenbai/MapDiff](https://github.com/peizhenbai/MapDiff). The IPA design in
-MapDiff derives from OpenFold code copyright 2021 AlQuraishi Laboratory and
-DeepMind Technologies Limited under Apache License 2.0. See the upstream paper,
-*Mask-prior-guided denoising diffusion improves inverse protein folding*, for
-the published method and training results.
-
-## Pretrained Release
-
-Install the model extra first:
-
-```bash
-python -m pip install -e ".[mapdiff]"
+```text
+mapdiff_inverse_folding/
+  config.yaml
+  configuration.py
+  modeling.py
+  egnn.py
+  ipa.py
+  diffusion.py
+  upstream_compat.py
+  pretrain_ipa.py
+  train_diffusion.py
+  evaluate.py
+  generate.py
+  maps/
+  data/
+  weights/
 ```
 
-`AutoProteinModel("InverseFolding/MapDiff", pretrain=True)` and
-`AutoProteinGenerator(..., pretrain=True)` select `upstream-mapdiff-v1`, resolve
-the configured v1.0.1 URL through `kale_protein.auto.weights`, extract the common
-`{"model": state_dict}` container, and load all keys and shapes strictly.
+The complete model contains two registered roles:
 
-The card profile reproduces the checkpoint's embedded construction config:
-31 node inputs, 93 edge inputs, 128 hidden channels, six EGNN layers, six IPA
-layers, 500 diffusion steps, marginal noise, and mask ratio 0.4 +/- 0.2. The
-CATH 4.2 marginal is packaged as `maps/train_marginal_x.json` in the upstream
-amino-acid order `ARNDCQEGHILKMFPSTWYV`.
+```text
+MapDiffModel
+  AutoProteinEmbedder("structure/mapdiff_condition")
+  AutoProteinPredictor("inverse_folding/mapdiff_generator")
+```
+
+The predictor is the diffusion generator and owns the learned denoising
+network. The embedder is a non-owning condition-encoding view, so parameters
+and checkpoint keys are not duplicated. `MapDiffModel` is the only full
+checkpoint owner.
+
+## Generation Pipeline
 
 ```python
-from kale_protein.auto import AutoProteinGenerator, AutoProteinModel
-from kale_protein.tasks.inverse_folding import CATHGraphDataset, CollatorDiff
+from kale_protein.auto import AutoProteinData, AutoProteinModel, AutoProteinPreprocessor
+from kale_protein.core.tasks.inverse_folding import CollatorDiff
 
-batch = CollatorDiff()([CATHGraphDataset("structure.pdb")[0]])
+# 1. Load a processed CATH graph or PDB.
+record = AutoProteinData("InverseFolding/CATH", source="structure.pdb")[0]
+
+# 2. Preprocess the backbone.
+preprocessor = AutoProteinPreprocessor("protein/structure")
+structure = preprocessor.featurize(
+    {
+        "backbone_coords": record.atom_pos,
+        "sequence": record.sequence,
+        "id": record.identifier,
+    }
+)
+
+# 3. Build sparse EGNN and padded IPA views.
+batch = CollatorDiff()([structure["graph"]])
+
+# 4. Load one complete model.
 model = AutoProteinModel("InverseFolding/MapDiff", pretrain=True)
-generator = AutoProteinGenerator("InverseFolding/MapDiff", pretrain=True)
-result = generator.generate(model.embed(batch), steps=100, method="ddim")
+
+# 5. Encode the structural condition.
+conditioning = model.embed(batch)
+
+# 6. Run iterative sequence generation.
+output = model.predictor.generate(
+    conditioning,
+    steps=100,
+    method="ddim",
+    num_samples=1,
+)
 ```
+
+Generation returns sequences, logits, token ids, and a non-empty denoising
+trajectory.
+
+## Architectures
+
+- `upstream-mapdiff-v1` matches the published v1.0.1 parameter tree under
+  `model`, `prior_model`, and `noise_schedule`.
+- `kale-mapdiff-v1` is a smaller real EGNN, IPA, and categorical-diffusion
+  implementation used for local training and tests.
+
+The release profile uses 31 node inputs, 93 edge inputs, 128 hidden channels,
+six EGNN layers, six IPA layers, 500 diffusion steps, and the packaged CATH
+marginal in `maps/train_marginal_x.json`.
 
 ## Data Compatibility
 
-`CATHGraphDataset` reads plain `.pt` graph dictionaries/directories and PDB
-files. PDB preprocessing retains complete `N, CA, C, O` backbones. The release
-adapter adds virtual C-beta atoms and reconstructs the trained 31/93-dimensional
-CATH geometric channels, including the historical release channel ordering.
+`CATHGraphDataset` reads plain `.pt` graph dictionaries, directories, and PDB
+files. PDB preprocessing retains `N, CA, C, O` backbones; the release adapter
+constructs the virtual C-beta and expected geometric channels.
 
 Raw PDBs do not provide the normalized solvent-accessibility, B-factor, or DSSP
-channels used in CATH training; those channels are set to zero. This does not
-affect checkpoint compatibility or execution, but can affect prediction quality
-relative to the authors' fully processed CATH graphs. Loading a `.pt` object
-pickled as a PyG class still requires PyG solely to unpickle that object; plain
-dictionary records do not.
+channels used during upstream CATH training, so those channels are zero-filled.
+Processed CATH records are preferred for published-checkpoint quality.
 
 ## Workflows
 
 ```bash
-python -m kale_protein.examples.mapdiff_inverse_folding.generate structure.pdb --pretrained --steps 100
-python -m kale_protein.examples.mapdiff_inverse_folding.evaluate CATH_DIR --pretrained
-python -m kale_protein.examples.mapdiff_inverse_folding.pretrain_ipa CATH_DIR --output ipa.pt
-python -m kale_protein.examples.mapdiff_inverse_folding.train_diffusion CATH_DIR --ipa-checkpoint ipa.pt --output mapdiff.pt
+python -m pip install -e ".[mapdiff]"
+
+python -m kale_protein.examples.mapdiff_inverse_folding.pretrain_ipa \
+  /data/cath/train --output ipa.pt
+
+python -m kale_protein.examples.mapdiff_inverse_folding.train_diffusion \
+  /data/cath/train --ipa-checkpoint ipa.pt --output mapdiff.pt
+
+python -m kale_protein.examples.mapdiff_inverse_folding.evaluate \
+  /data/cath/test --pretrained
+
+python -m kale_protein.examples.mapdiff_inverse_folding.generate \
+  structure.pdb --pretrained --steps 100
 ```
 
-`pretrain_ipa.py` and `train_diffusion.py` train the lightweight
-`kale-mapdiff-v1` architecture. `generate.py` and `evaluate.py` accept either
-`--pretrained` for the release or `--checkpoint` for automatic architecture
-detection and strict local loading.
+- `pretrain_ipa.py` trains the masking prior.
+- `train_diffusion.py` trains the full lightweight diffusion model.
+- `evaluate.py` reports sequence recovery, perplexity, and diversity.
+- `generate.py` preprocesses a structure and samples sequences.
 
-## Dependencies
+## Pretrained Weights
 
-Both architectures require PyTorch 2.0 or newer. PyG, `torch_scatter`, OpenFold,
-Hydra, Biopython, DSSP, SciPy, and `einops` are not runtime requirements for
-plain PDB or dictionary `.pt` inputs.
+`pretrain=True` checks `weights/mapdiff_weight.pt` and otherwise atomically
+downloads the configured release:
+
+```text
+https://github.com/peizhenbai/MapDiff/releases/download/v1.0.1/mapdiff_weight.pt
+```
+
+The card detects lightweight versus release parameter layouts and requires an
+exact state-key and tensor-shape match. It never falls back to `strict=False`.
+
+## Dependencies And Attribution
+
+Plain PDB and dictionary `.pt` inputs require PyTorch but not PyG,
+`torch_scatter`, OpenFold, Hydra, Biopython, DSSP, or `einops`.
+
+The architecture and adapted code derive from
+[peizhenbai/MapDiff](https://github.com/peizhenbai/MapDiff) under the MIT
+License. IPA-related attribution is listed in `THIRD_PARTY_NOTICES.md`.

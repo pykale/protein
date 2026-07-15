@@ -1,108 +1,116 @@
 # KaleProtein Architecture
 
-KaleProtein uses a model-card-driven Auto layer. Shared Auto classes discover
-implementations from `config.yaml` and `auto_map`; architecture-specific code
-stays inside each model package.
+The repository has three layers: generic Auto dispatch, reusable core
+components, and complete model examples.
 
 ```mermaid
 flowchart TB
-    ENTRY["User code or runnable example CLI"]
-
-    subgraph PIPELINE["Explicit runtime pipeline"]
+    subgraph CORE["core: shared and reusable"]
         direction LR
-        DATA["1. Load data<br/>AutoProteinData"]
-        PREPROCESS["2. Preprocess and collate<br/>AutoProteinPreprocessor<br/>AutoMoleculePreprocessor"]
-        MODEL["3. Build and embed<br/>AutoProteinModel<br/>model.embed()"]
-        INFERENCE["4. Predict or generate<br/>AutoProteinPredictor<br/>AutoProteinGenerator"]
-        OUTPUT["5. Evaluate or interpret<br/>AutoProteinEvaluator<br/>AutoProteinInterpreter"]
-
-        DATA --> PREPROCESS --> MODEL --> INFERENCE --> OUTPUT
+        REGISTRY["registry/"]
+        CONFIG["config/"]
+        WEIGHTS["weights/"]
+        MODALITIES["modalities/<br/>sequence, molecule, structure"]
+        TASKS["tasks/<br/>dti, inverse_folding"]
     end
 
-    ENTRY --> DATA
-
-    subgraph GENERIC["Generic infrastructure: no model-specific classes"]
+    subgraph AUTO["auto: selection and construction"]
         direction LR
-        CONFIG["auto/config.py<br/>AutoProteinConfig"]
-        CARDS["registry/model_cards.py<br/>filesystem discovery<br/>auto_map import"]
-        REGISTRIES["registry/*<br/>datasets, processors<br/>metrics, interpreters"]
-        WEIGHTS["auto/weights.py<br/>local first, download<br/>checksum, checkpoint load"]
-
-        CONFIG -->|"reads auto_map"| CARDS
+        DATA["AutoProteinData"]
+        PREP["AutoProteinPreprocessor"]
+        MODEL["AutoProteinModel"]
+        EMBED["AutoProteinEmbedder"]
+        PREDICT["AutoProteinPredictor"]
+        EVAL["AutoProteinEvaluator"]
+        INTERP["AutoProteinInterpreter"]
+        DATA --> PREP --> MODEL --> EVAL --> INTERP
+        MODEL --> EMBED
+        MODEL --> PREDICT
     end
 
-    DATA -.->|"dataset ID"| REGISTRIES
-    PREPROCESS -.->|"modality ID"| REGISTRIES
-    OUTPUT -.->|"task and method"| REGISTRIES
-    MODEL -.->|"model ID"| CONFIG
-    INFERENCE -.->|"model ID"| CONFIG
-    MODEL -.->|"pretrain=True"| WEIGHTS
-    INFERENCE -.->|"pretrain=True"| WEIGHTS
-
-    subgraph SHARED["Reusable shared layer"]
+    subgraph EXAMPLES["examples: complete named models"]
         direction LR
-        MODALITIES["modalities/<br/>protein_sequence<br/>protein_structure<br/>small_molecule"]
-        TASKS["tasks/<br/>drug_target_interaction<br/>inverse_folding"]
-        DTI["Reusable DTI datasets<br/>BindingDB, Human, BioSNAP"]
-        INVERSE_DATA["Inverse-folding data<br/>CATH .pt, PDB preprocessing<br/>CollatorIPAPretrain, CollatorDiff"]
-
-        TASKS --> DTI
-        TASKS --> INVERSE_DATA
+        DRUGBAN["drugban_dti/<br/>config + model + scripts + assets"]
+        MAPDIFF["mapdiff_inverse_folding/<br/>config + model + scripts + assets"]
+        MORE["new model cards"]
     end
 
-    REGISTRIES --> MODALITIES
-    REGISTRIES --> TASKS
-
-    subgraph MODEL_PACKAGES["Self-contained model-card packages"]
-        direction LR
-
-        subgraph DRUGBAN["examples/drugban_dti/"]
-            DB_CONFIG["config.yaml<br/>configuration.py"]
-            DB_MODEL["modeling.py<br/>molecular GCN<br/>protein CNN<br/>BAN and MLP"]
-            DB_SCRIPTS["train.py, evaluate.py<br/>predict.py, interpret.py"]
-            DB_ASSETS["data/<br/>weights/"]
-
-            DB_CONFIG --> DB_MODEL
-            DB_ASSETS --> DB_MODEL
-        end
-
-        subgraph MAPDIFF["examples/mapdiff_inverse_folding/"]
-            MD_CONFIG["config.yaml<br/>configuration.py"]
-            MD_MODEL["modeling.py<br/>egnn.py, ipa.py<br/>diffusion.py"]
-            MD_COMPAT["upstream_compat.py<br/>MapDiff v1 checkpoint layout"]
-            MD_SCRIPTS["pretrain_ipa.py<br/>train_diffusion.py<br/>evaluate.py, generate.py"]
-            MD_ASSETS["data/<br/>weights/<br/>maps/"]
-
-            MD_CONFIG --> MD_MODEL
-            MD_COMPAT --> MD_MODEL
-            MD_ASSETS --> MD_MODEL
-        end
-    end
-
-    ENTRY --> DB_SCRIPTS
-    ENTRY --> MD_SCRIPTS
-    DB_SCRIPTS -.->|"uses Auto APIs"| DATA
-    MD_SCRIPTS -.->|"uses Auto APIs"| DATA
-
-    CARDS -->|"DTI/DrugBAN"| DB_CONFIG
-    CARDS -->|"InverseFolding/MapDiff"| MD_CONFIG
-    WEIGHTS -->|"DrugBAN checkpoint"| DB_MODEL
-    WEIGHTS -->|"MapDiff checkpoint"| MD_MODEL
-
-    QUALITY["tests/ and GitHub Actions<br/>fake data, fake URLs, mocked dependencies<br/>pytest, compileall, package build"]
-    QUALITY -.->|"validates Auto dispatch"| REGISTRIES
-    QUALITY -.->|"validates pipeline wiring"| DATA
-    QUALITY -.->|"validates implementations"| DB_MODEL
-    QUALITY -.->|"validates implementations"| MD_MODEL
+    AUTO -->|"generic registry lookup"| CORE
+    MODEL -->|"auto_map"| EXAMPLES
+    EXAMPLES -->|"compose reusable components"| CORE
 ```
 
-## Ownership Boundaries
+## User API
 
-- `auto/` resolves public identifiers and checkpoints but does not define
-  DrugBAN, MapDiff, or another concrete architecture.
-- `registry/`, `modalities/`, and `tasks/` contain reusable discovery,
-  preprocessing, dataset, metric, and interpretation components.
-- `examples/<model>/` owns the model card, configuration class, model classes,
-  workflow scripts, maps, and weight location for that architecture.
-- Every workflow exposes the same stages while retaining model-specific train,
-  evaluation, prediction, interpretation, or generation behavior.
+Users normally construct one complete model:
+
+```python
+model = AutoProteinModel("DTI/DrugBAN", pretrain=True)
+```
+
+`AutoProteinModel` reads the model card and imports its `modeling.py`. It does
+not contain a DrugBAN or MapDiff condition.
+
+## Model Composition
+
+The concrete class is the composition root. DrugBAN declares:
+
+```text
+DrugBANModel
+  protein_embedder  <- AutoProteinEmbedder("sequence/cnn")
+  molecule_embedder <- AutoProteinEmbedder("molecule/gcn")
+  predictor         <- AutoProteinPredictor("dti/ban")
+```
+
+MapDiff declares:
+
+```text
+MapDiffModel
+  embedder  <- AutoProteinEmbedder("structure/mapdiff_condition")
+  predictor <- AutoProteinPredictor("inverse_folding/mapdiff_generator")
+```
+
+For a discriminative model, the predictor is the task fusion/head. For a
+generative model, the predictor is the generator or denoiser. Component Auto
+classes are model-author APIs; they do not resolve full model cards.
+
+## Runtime Pipelines
+
+DrugBAN:
+
+```mermaid
+flowchart LR
+    CSV["BindingDB / Human / BioSNAP"] --> PREP["SMILES graph + protein sequence"]
+    PREP --> COLLATE["DrugBAN collator"]
+    COLLATE --> EMBED["molecule GCN + sequence CNN"]
+    EMBED --> PREDICT["BAN predictor"]
+    PREDICT --> METRICS["metrics"]
+    PREDICT --> ATTENTION["optional attention interpretation"]
+```
+
+MapDiff:
+
+```mermaid
+flowchart LR
+    INPUT["CATH graph / PDB"] --> PREP["backbone preprocessing"]
+    PREP --> COLLATE["sparse graph + padded IPA batch"]
+    COLLATE --> CONDITION["structure condition encoding"]
+    CONDITION --> GENERATE["iterative diffusion generator"]
+    GENERATE --> METRICS["recovery / perplexity / diversity"]
+    GENERATE --> TRAJECTORY["optional trajectory interpretation"]
+```
+
+## Ownership Rules
+
+- `auto/` owns generic dispatch only.
+- `core/modalities/` owns reusable modality processors and encoders.
+- `core/tasks/` owns reusable datasets, collators, task heads, metrics, and
+  interpreters.
+- `examples/<model>/` owns concrete model composition, model-specific layers,
+  forward/generate behavior, scripts, and checkpoint adapters.
+- The complete model is the sole owner of full-model weight resolution and
+  loading. Nested components never download the same checkpoint again.
+
+Adding a new model normally adds one example directory and model card. Core is
+changed only when the model introduces a genuinely reusable component; Auto is
+not changed.

@@ -7,7 +7,7 @@ import math
 import torch
 from torch import nn
 
-from kale_protein.tasks.inverse_folding.datasets import AA_ALPHABET, DiffusionBatch, IPABatch
+from kale_protein.core.tasks.inverse_folding.datasets import AA_ALPHABET, DiffusionBatch, IPABatch
 
 from kale_protein.examples.mapdiff_inverse_folding.egnn import EGNNSequenceDenoiser
 from kale_protein.examples.mapdiff_inverse_folding.ipa import IPAMaskPrior
@@ -105,8 +105,15 @@ class MapDiffDiffusion(nn.Module):
             x[graph_index, masked] = 0.0
         return IPABatch(x, ipa.atom_pos, ipa.x_pad, x_mask, ipa.label)
 
-    def predict_logits(self, batch: DiffusionBatch, noisy_x, graph_timesteps):
-        base_logits = self.denoiser(batch.graph, noisy_x, graph_timesteps.float())
+    def predict_logits(
+        self, batch: DiffusionBatch, noisy_x, graph_timesteps, conditioning=None
+    ):
+        base_logits = self.denoiser(
+            batch.graph,
+            noisy_x,
+            graph_timesteps.float(),
+            conditioning=conditioning,
+        )
         base_probs = torch.softmax(base_logits, dim=-1)
         entropy = -(base_probs * torch.log(base_probs.clamp_min(1e-8))).sum(dim=-1)
         prior_input = self._prior_inputs(batch, base_probs, entropy, graph_timesteps)
@@ -120,12 +127,14 @@ class MapDiffDiffusion(nn.Module):
         fused_logits = base_logits * weights[:, :1] + prior_logits * weights[:, 1:]
         return fused_logits, base_logits, prior_logits, prior_input
 
-    def forward(self, batch: DiffusionBatch):
+    def forward(self, batch: DiffusionBatch, conditioning=None):
         graph = batch.graph
         graph_timesteps = torch.randint(1, self.transition.timesteps + 1, (graph.num_graphs,), device=graph.x.device)
         node_timesteps = graph_timesteps[graph.batch]
         noisy_x = self.transition.q_sample(graph.x, node_timesteps)
-        fused_logits, base_logits, prior_logits, prior_input = self.predict_logits(batch, noisy_x, graph_timesteps)
+        fused_logits, base_logits, prior_logits, prior_input = self.predict_logits(
+            batch, noisy_x, graph_timesteps, conditioning=conditioning
+        )
         target = graph.x.argmax(dim=-1)
         base_loss = torch.nn.functional.cross_entropy(base_logits, target)
         prior_mask = prior_input.x_mask[prior_input.x_pad] == 1
@@ -155,7 +164,15 @@ class MapDiffDiffusion(nn.Module):
         return sequences
 
     @torch.no_grad()
-    def sample(self, batch: DiffusionBatch, steps=50, method="ddim", temperature=1.0, num_samples=1):
+    def sample(
+        self,
+        batch: DiffusionBatch,
+        steps=50,
+        method="ddim",
+        temperature=1.0,
+        num_samples=1,
+        conditioning=None,
+    ):
         if method not in {"ddim", "ddpm"}:
             raise ValueError("sampling method must be 'ddim' or 'ddpm'.")
         if steps < 1:
@@ -171,7 +188,9 @@ class MapDiffDiffusion(nn.Module):
             trajectory = [{"timestep": int(schedule[0]), "sequences": self._decode(z_t.argmax(-1), graph)}]
             for current, following in zip(schedule[:-1], schedule[1:]):
                 graph_t = torch.full((graph.num_graphs,), int(current), device=graph.x.device, dtype=torch.long)
-                logits, _, _, _ = self.predict_logits(batch, z_t, graph_t)
+                logits, _, _, _ = self.predict_logits(
+                    batch, z_t, graph_t, conditioning=conditioning
+                )
                 probabilities_x0 = torch.softmax(logits / max(float(temperature), 1e-4), dim=-1)
                 if int(following) == 0:
                     next_tokens = probabilities_x0.argmax(dim=-1)

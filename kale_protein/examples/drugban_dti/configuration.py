@@ -8,4 +8,4 @@ class DrugBANConfig(AutoProteinConfig):
 
     @property
     def architecture(self):
-        return self.get("drugban", {})
+        return self.get("components", {})
