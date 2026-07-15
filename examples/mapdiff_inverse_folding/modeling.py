@@ -10,8 +10,8 @@ import torch
 from torch import nn
 
 from kaleprotein.auto import AutoProteinEmbedder, AutoProteinPredictor
-from kaleprotein.core.data.collators.inverse_folding import CollatorDiff, CollatorIPAPretrain
-from kaleprotein.core.data.datasets.inverse_folding import (
+from .collators import CollatorDiff, CollatorIPAPretrain
+from .data import (
     DiffusionBatch,
     GraphBatch,
     coerce_protein_graph,
@@ -131,7 +131,9 @@ class MapDiffGenerator(nn.Module):
     @staticmethod
     def as_batch(value=None, batch=None):
         value = batch if batch is not None else value
-        if isinstance(value, DiffusionBatch):
+        if isinstance(value, DiffusionBatch) or (
+            hasattr(value, "graph") and hasattr(value, "ipa")
+        ):
             return value
         if isinstance(value, GraphBatch):
             raise ValueError("MapDiff needs the paired IPA view; collate records with CollatorDiff.")

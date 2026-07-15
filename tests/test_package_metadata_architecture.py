@@ -31,7 +31,7 @@ def test_base_import_and_dti_data_do_not_require_model_dependencies(tmp_path):
         "import sys; "
         f"sys.path.insert(0, {str(root)!r}); "
         "from kaleprotein.auto import AutoProteinData; "
-        f"assert AutoProteinData('DTI/BindingDB', root={str(tmp_path)!r})[0]['label'] == 1"
+        f"assert AutoProteinData('BindingDB/DTI', root={str(tmp_path)!r})[0]['label'] == 1"
     )
 
     result = subprocess.run(
@@ -50,11 +50,12 @@ def test_repository_uses_auto_core_examples_layers_only():
     package = root / "kaleprotein"
     assert (package / "auto" / "modeling.py").is_file()
     assert (package / "core" / "registry").is_dir()
-    assert (package / "core" / "data" / "preprocessors" / "sequence.py").is_file()
-    assert (package / "core" / "data" / "preprocessors" / "molecule.py").is_file()
-    assert (package / "core" / "data" / "datasets" / "dti.py").is_file()
-    assert (package / "core" / "data" / "datasets" / "inverse_folding.py").is_file()
-    assert (package / "core" / "data" / "collators" / "inverse_folding.py").is_file()
+    assert (package / "core" / "data" / "utils" / "fasta.py").is_file()
+    assert (package / "core" / "data" / "utils" / "pdb.py").is_file()
+    assert (package / "core" / "data" / "utils" / "mmcif.py").is_file()
+    assert (package / "core" / "data" / "bindingdb.py").is_file()
+    assert (package / "core" / "data" / "cath.py").is_file()
+    assert (package / "core" / "preprocessing" / "sequence.py").is_file()
     assert (package / "core" / "modeling" / "modalities" / "sequence").is_dir()
     assert (package / "core" / "modeling" / "tasks" / "dti").is_dir()
     assert (package / "core" / "evaluation" / "tasks" / "dti").is_dir()
@@ -71,8 +72,8 @@ def test_repository_uses_auto_core_examples_layers_only():
     assert not (package / "examples").exists()
     assert not (package / "tests").exists()
 
-    assert not any((package / "core" / "data" / "modalities").rglob("*.py"))
-    assert not any((package / "core" / "data" / "tasks").rglob("*.py"))
+    for legacy_data_dir in ("collators", "datasets", "modalities", "preprocessors", "tasks"):
+        assert not any((package / "core" / "data" / legacy_data_dir).rglob("*.py"))
     assert not any((package / "core" / "modalities").rglob("*.py"))
     assert not any((package / "core" / "tasks").rglob("*.py"))
 

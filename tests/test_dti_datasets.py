@@ -1,7 +1,10 @@
 import pytest
 
 from kaleprotein.auto import AutoProteinData
-from kaleprotein.core.data.datasets.dti import DrugTargetInteractionDataset
+from kaleprotein.core.data.base import DTIDataset
+from kaleprotein.core.data.bindingdb import BindingDBDTIDataset
+from kaleprotein.core.data.biosnap import BioSNAPDTIDataset
+from kaleprotein.core.data.human import HumanDTIDataset
 
 
 def test_bindingdb_full_loader_normalizes_drugban_columns(tmp_path):
@@ -12,9 +15,10 @@ def test_bindingdb_full_loader_normalizes_drugban_columns(tmp_path):
         encoding="utf-8",
     )
 
-    dataset = AutoProteinData("DTI/BindingDB", root=tmp_path)
+    dataset = AutoProteinData("BindingDB/DTI", root=tmp_path)
 
-    assert isinstance(dataset, DrugTargetInteractionDataset)
+    assert isinstance(dataset, BindingDBDTIDataset)
+    assert isinstance(dataset, DTIDataset)
     assert len(dataset) == 2
     assert dataset[0]["smiles"] == "CCO"
     assert dataset[0]["sequence"] == "MKTFFVLLL"
@@ -22,7 +26,7 @@ def test_bindingdb_full_loader_normalizes_drugban_columns(tmp_path):
     assert dataset[0]["metadata"]["extra_fields"] == {}
     assert dataset.labels == [1, 0]
 
-    direct_dataset = AutoProteinData("DTI/bindingdb", root=dataset_dir, limit=1)
+    direct_dataset = AutoProteinData("bindingdb/dti", root=dataset_dir, limit=1)
     assert len(direct_dataset) == 1
     assert direct_dataset[0]["smiles"] == "CCO"
 
@@ -35,12 +39,13 @@ def test_human_random_split_loader_supports_common_aliases(tmp_path):
         encoding="utf-8",
     )
 
-    dataset = AutoProteinData("DTI/Human", root=tmp_path, split="random", subset="train")
+    dataset = AutoProteinData("Human/DTI", root=tmp_path, split="random", subset="train")
 
+    assert isinstance(dataset, HumanDTIDataset)
     assert len(dataset) == 1
     assert dataset.split == "random"
     assert dataset.subset == "train"
-    assert dataset[0]["dataset"] == "DTI/Human"
+    assert dataset[0]["dataset"] == "Human/DTI"
     assert dataset[0]["label"] == 1
 
 
@@ -48,8 +53,9 @@ def test_biosnap_cluster_split_can_load_from_direct_path(tmp_path):
     csv_path = tmp_path / "biosnap_test.csv"
     csv_path.write_text("drug,protein,interaction\nCCN,MMMM,0\n", encoding="utf-8")
 
-    dataset = AutoProteinData("DTI/BioSNAP", path=csv_path)
+    dataset = AutoProteinData("BioSNAP/DTI", path=csv_path)
 
+    assert isinstance(dataset, BioSNAPDTIDataset)
     assert len(dataset) == 1
     assert dataset.path == csv_path
     assert dataset[0]["smiles"] == "CCN"
@@ -61,7 +67,7 @@ def test_split_loader_requires_subset(tmp_path):
     (tmp_path / "bindingdb" / "random").mkdir(parents=True)
 
     with pytest.raises(ValueError, match="requires subset"):
-        AutoProteinData("DTI/BindingDB", root=tmp_path, split="random")
+        AutoProteinData("BindingDB/DTI", root=tmp_path, split="random")
 
 
 def test_cluster_loader_accepts_upstream_target_subset_names(tmp_path):
@@ -73,7 +79,7 @@ def test_cluster_loader_accepts_upstream_target_subset_names(tmp_path):
     )
 
     dataset = AutoProteinData(
-        "DTI/BindingDB",
+        "BindingDB/DTI",
         root=tmp_path,
         split="cluster",
         subset="target_test.csv",
@@ -91,7 +97,7 @@ def test_loader_rejects_invalid_labels_with_row_context(tmp_path):
     )
 
     with pytest.raises(ValueError, match=r"numeric.*row 2"):
-        AutoProteinData("DTI/Human", root=tmp_path)
+        AutoProteinData("Human/DTI", root=tmp_path)
 
 
 @pytest.mark.parametrize("limit", [-1, 1.5, True])
@@ -104,4 +110,9 @@ def test_loader_validates_limit(limit, tmp_path):
     )
 
     with pytest.raises(ValueError, match="non-negative integer"):
-        AutoProteinData("DTI/BioSNAP", root=tmp_path, limit=limit)
+        AutoProteinData("BioSNAP/DTI", root=tmp_path, limit=limit)
+
+
+def test_auto_data_requires_dataset_task_id():
+    with pytest.raises(ValueError, match="Dataset/Task"):
+        AutoProteinData("BindingDB")

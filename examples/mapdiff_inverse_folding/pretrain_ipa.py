@@ -27,12 +27,12 @@ def main(argv=None):
     torch.manual_seed(args.seed)
 
     # 1. Load and preprocess protein graphs.
-    dataset = AutoProteinData("InverseFolding/CATH", source=args.data)
+    dataset = AutoProteinData("CATH/InverseFolding", source=args.data)
     preprocessor = AutoProteinPreprocessor("protein/structure")
-    processed_graphs = [preprocessor.featurize(record)["graph"] for record in dataset]
+    processed_structures = [preprocessor.featurize(record) for record in dataset]
     model = AutoProteinModel("InverseFolding/MapDiff", pretrain=False).to(args.device)
     loader = DataLoader(
-        processed_graphs,
+        processed_structures,
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,

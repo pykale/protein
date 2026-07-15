@@ -48,7 +48,7 @@ def test_drugban_direct_pipeline_style(fake_rdkit_graph, tmp_path):
     (dataset_dir / "full.csv").write_text(
         "SMILES,Protein,Y\nCCO,MKTFFVLLLMKTFFVLLL,1\n", encoding="utf-8"
     )
-    sample = AutoProteinData("DTI/BindingDB", root=tmp_path)[0]
+    sample = AutoProteinData("BindingDB/DTI", root=tmp_path)[0]
     protein_data = AutoProteinPreprocessor("protein/sequence").tokenize(sample)
     molecule_data = AutoMoleculePreprocessor("molecule/SMILE").featurize(sample)
     model = AutoProteinModel("DTI/DrugBAN", pretrain=False)
@@ -146,7 +146,7 @@ def test_mapdiff_direct_generative_pipeline_style(tmp_path):
         },
         tmp_path / "protein.pt",
     )
-    graph = AutoProteinData("InverseFolding/CATH", source=tmp_path)[0]
+    graph = AutoProteinData("CATH/InverseFolding", source=tmp_path)[0]
     structure_data = AutoProteinPreprocessor("protein/structure").featurize(
         {"backbone_coords": graph.atom_pos, "sequence": graph.sequence}
     )

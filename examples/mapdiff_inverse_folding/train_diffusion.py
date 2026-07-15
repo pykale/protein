@@ -29,7 +29,7 @@ def main(argv=None):
     torch.manual_seed(args.seed)
 
     # 1. Load, preprocess, and collate CATH or PDB graphs.
-    dataset = AutoProteinData("InverseFolding/CATH", source=args.data)
+    dataset = AutoProteinData("CATH/InverseFolding", source=args.data)
     preprocessor = AutoProteinPreprocessor("protein/structure")
     processed = [preprocessor.featurize(record) for record in dataset]
     model = AutoProteinModel("InverseFolding/MapDiff", pretrain=False).to(args.device)

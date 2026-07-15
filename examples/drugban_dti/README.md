@@ -44,7 +44,7 @@ from kaleprotein.auto import (
 
 # 1. Load normalized DTI records.
 data = AutoProteinData(
-    "DTI/BindingDB",
+    "BindingDB/DTI",
     root="path/to/DrugBAN/datasets",
     split="random",
     subset="test",
@@ -87,9 +87,9 @@ MLP classifier.
 BindingDB, Human, and BioSNAP use the same model-independent loader:
 
 ```python
-bindingdb = AutoProteinData("DTI/BindingDB", root="path/to/datasets")
-human = AutoProteinData("DTI/Human", root="path/to/datasets")
-biosnap = AutoProteinData("DTI/BioSNAP", root="path/to/datasets")
+bindingdb = AutoProteinData("BindingDB/DTI", root="path/to/datasets")
+human = AutoProteinData("Human/DTI", root="path/to/datasets")
+biosnap = AutoProteinData("BioSNAP/DTI", root="path/to/datasets")
 ```
 
 Use `split` and `subset` for layouts such as `random/train.csv` or

@@ -52,7 +52,10 @@ jobs:
               "kale_protein/",
               "examples/",
               "tests/",
+              "kaleprotein/core/data/collators/",
+              "kaleprotein/core/data/datasets/",
               "kaleprotein/core/data/modalities/",
+              "kaleprotein/core/data/preprocessors/",
               "kaleprotein/core/data/tasks/",
           )
           assert not any(name.startswith(forbidden) for name in names), names

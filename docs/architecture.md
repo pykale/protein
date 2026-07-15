@@ -19,7 +19,8 @@ flowchart TB
     subgraph PACKAGE["installed package: kaleprotein/"]
       subgraph CORE["core: shared and reusable"]
         direction LR
-        CORE_DATA["data/<br/>preprocessors + datasets + collators"]
+        CORE_DATA["data/<br/>utils + dataset modules + schemas"]
+        CORE_PREP["preprocessing/<br/>reusable transforms"]
         CORE_MODELING["modeling/<br/>modalities + tasks"]
         CORE_EVAL["evaluation/<br/>task metrics + interpretation"]
         REGISTRY["registry/"]
@@ -139,15 +140,21 @@ flowchart LR
 ## Ownership Rules
 
 - `auto/` owns generic dispatch only.
-- `core/data/preprocessors/` owns reusable input transformations.
-- `core/data/datasets/` owns reusable dataset loaders.
-- `core/data/collators/` owns reusable batch construction.
+- `core/data/utils/` owns fundamental FASTA, tabular, PDB, mmCIF, and file
+  parsing functions.
+- `core/data/<dataset>.py` owns built-in dataset adapters such as BindingDB,
+  BioSNAP, Human, and CATH. Public ids use `Dataset/Task` order.
+- `core/data/base.py` and `core/data/schemas.py` own shared dataset classes and
+  stable data records.
+- `core/preprocessing/` owns reusable transformations that prepare records for
+  model inputs without becoming dataset loaders.
 - `core/modeling/modalities/` owns reusable modality encoders and neural layers.
 - `core/modeling/tasks/` owns reusable fusion layers, heads, predictors, and
   generators.
 - `core/evaluation/tasks/` owns task metrics and interpretation methods.
 - `examples/<model>/` owns concrete model composition, model-specific layers,
-  forward/generate behavior, scripts, and checkpoint adapters.
+  collators, feature graphs, forward/generate behavior, scripts, and checkpoint
+  adapters.
 - The complete model is the sole owner of full-model weight resolution and
   loading. Nested components never download the same checkpoint again.
 

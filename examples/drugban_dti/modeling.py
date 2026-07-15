@@ -15,7 +15,7 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
 from kaleprotein.auto import AutoProteinEmbedder, AutoProteinPredictor
-from kaleprotein.core.data.preprocessors.molecule import RDKitGraphProcessor
+from kaleprotein.core.preprocessing.molecule import RDKitGraphProcessor
 from kaleprotein.core.weights import load_checkpoint_state_dict, resolve_pretrained_weight
 
 

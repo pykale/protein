@@ -1,10 +1,10 @@
-"""Reusable sparse-graph and padded-IPA inverse-folding collators."""
+"""MapDiff-specific sparse-graph and padded-IPA collators."""
 
 from __future__ import annotations
 
 from typing import Iterable
 
-from ..datasets.inverse_folding import (
+from .data import (
     DiffusionBatch,
     GraphBatch,
     IPABatch,

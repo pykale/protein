@@ -11,7 +11,7 @@ import torch
 from kaleprotein.auto import AutoProteinData
 
 
-DATASETS = {name: f"DTI/{name}" for name in ("BindingDB", "Human", "BioSNAP")}
+DATASETS = {name: f"{name}/DTI" for name in ("BindingDB", "Human", "BioSNAP")}
 
 
 class LazyPreprocessedDataset:

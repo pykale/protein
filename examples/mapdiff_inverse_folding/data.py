@@ -1,23 +1,15 @@
-"""Reusable structure graph data and CATH/processed-PT loading utilities."""
+"""MapDiff-specific graph and batch data structures."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
-from pathlib import Path
-from typing import Any, Iterable, Iterator, Sequence
+from typing import Any
 
-from kaleprotein.core.registry import DATASET_REGISTRY
+from kaleprotein.core.data.schemas import AMINO_ACID_ALPHABET
 
 
-AA_ALPHABET = "ACDEFGHIKLMNPQRSTVWY"
+AA_ALPHABET = AMINO_ACID_ALPHABET
 AA_TO_INDEX = {aa: index for index, aa in enumerate(AA_ALPHABET)}
-THREE_TO_ONE = {
-    "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C",
-    "GLN": "Q", "GLU": "E", "GLY": "G", "HIS": "H", "ILE": "I",
-    "LEU": "L", "LYS": "K", "MET": "M", "PHE": "F", "PRO": "P",
-    "SER": "S", "THR": "T", "TRP": "W", "TYR": "Y", "VAL": "V",
-    "MSE": "M",
-}
 
 
 def _torch():
@@ -25,8 +17,8 @@ def _torch():
         import torch
     except ImportError as exc:  # pragma: no cover - package runtime dependency
         raise ImportError(
-            "Inverse-folding graph loading requires PyTorch. Install torch before using "
-            "inverse-folding datasets."
+            "MapDiff graph construction requires PyTorch. Install torch before using "
+            "the MapDiff example."
         ) from exc
     return torch
 
@@ -273,113 +265,13 @@ def coerce_protein_graph(record: Any, identifier: str | None = None) -> ProteinG
     )
 
 
-def parse_pdb_backbone(path: str | Path, chain: str | None = None) -> ProteinGraph:
-    """Parse canonical residues with complete N/CA/C/O atoms from a PDB file."""
-
-    path = Path(path)
-    if not path.exists():
-        raise FileNotFoundError(f"PDB file does not exist: {path}")
-    residues: dict[tuple[str, str, str], dict[str, Any]] = {}
-    seen_model = False
-    with path.open("r", encoding="utf-8", errors="replace") as handle:
-        for line in handle:
-            if line.startswith("MODEL"):
-                if seen_model:
-                    break
-                seen_model = True
-                continue
-            if line.startswith("ENDMDL"):
-                break
-            if not line.startswith("ATOM  "):
-                continue
-            atom_name = line[12:16].strip()
-            altloc = line[16:17]
-            chain_id = line[21:22].strip()
-            if atom_name not in {"N", "CA", "C", "O"} or altloc not in {" ", "A"}:
-                continue
-            if chain is not None and chain_id != chain:
-                continue
-            residue_name = line[17:20].strip().upper()
-            if residue_name not in THREE_TO_ONE:
-                continue
-            key = (chain_id, line[22:26].strip(), line[26:27].strip())
-            try:
-                xyz = [float(line[30:38]), float(line[38:46]), float(line[46:54])]
-            except ValueError as exc:
-                raise ValueError(f"Invalid coordinate in {path} at PDB line: {line.rstrip()}") from exc
-            entry = residues.setdefault(key, {"name": residue_name, "atoms": {}})
-            entry["atoms"].setdefault(atom_name, xyz)
-
-    complete = [entry for entry in residues.values() if all(a in entry["atoms"] for a in ("N", "CA", "C", "O"))]
-    if not complete:
-        chain_hint = f" for chain {chain!r}" if chain is not None else ""
-        raise ValueError(
-            f"No residues with complete N/CA/C/O backbone atoms found in {path}{chain_hint}. "
-            "Check the chain identifier and PDB ATOM records."
-        )
-    coords = [[entry["atoms"][atom] for atom in ("N", "CA", "C", "O")] for entry in complete]
-    sequence = "".join(THREE_TO_ONE[entry["name"]] for entry in complete)
-    return build_residue_graph(coords, sequence, identifier=path.stem)
-
-
-def _load_pt(path: Path) -> list[ProteinGraph]:
-    torch = _torch()
-    try:
-        payload = torch.load(path, map_location="cpu", weights_only=False)
-    except ModuleNotFoundError as exc:
-        raise ImportError(
-            f"Could not load {path} because it was serialized with optional module "
-            f"{exc.name!r}. Re-save it as a plain dict containing atom_pos and x/sequence, "
-            "or install the module that created the file."
-        ) from exc
-    if isinstance(payload, dict) and "graphs" in payload:
-        payload = payload["graphs"]
-    records = payload if isinstance(payload, (list, tuple)) else [payload]
-    graphs = []
-    for index, record in enumerate(records):
-        try:
-            graphs.append(coerce_protein_graph(record, f"{path.stem}:{index}"))
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"Unsupported processed graph payload in {path} at item {index}: {exc}") from exc
-    return graphs
-
-
-class CATHGraphDataset(Sequence[ProteinGraph]):
-    """Load CATH-style individual/collection `.pt` files or PDB files."""
-
-    def __init__(self, source: str | Path | Iterable[str | Path], split: str | None = None):
-        if isinstance(source, (str, Path)):
-            source_path = Path(source)
-            if split and source_path.is_dir() and (source_path / split).exists():
-                source_path = source_path / split
-            paths = sorted(source_path.glob("*.pt")) + sorted(source_path.glob("*.pdb")) if source_path.is_dir() else [source_path]
-        else:
-            paths = [Path(item) for item in source]
-        if not paths:
-            raise FileNotFoundError(f"No .pt or .pdb structure files found under {source!s}")
-        self.graphs: list[ProteinGraph] = []
-        for path in paths:
-            if path.suffix.lower() == ".pt":
-                self.graphs.extend(_load_pt(path))
-            elif path.suffix.lower() == ".pdb":
-                self.graphs.append(parse_pdb_backbone(path))
-            else:
-                raise ValueError(f"Expected a .pt or .pdb file, got: {path}")
-
-    def __len__(self) -> int:
-        return len(self.graphs)
-
-    def __getitem__(self, index: int) -> ProteinGraph:
-        return self.graphs[index]
-
-    def __iter__(self) -> Iterator[ProteinGraph]:
-        return iter(self.graphs)
-
-
-@DATASET_REGISTRY.register("InverseFolding/CATH")
-def load_cath_dataset(source: str | Path | None = None, split: str | None = None):
-    if source is None:
-        raise ValueError(
-            "InverseFolding/CATH requires source='path/to/processed-graphs-or-pdbs'."
-        )
-    return CATHGraphDataset(source, split=split)
+__all__ = [
+    "AA_ALPHABET",
+    "AA_TO_INDEX",
+    "DiffusionBatch",
+    "GraphBatch",
+    "IPABatch",
+    "ProteinGraph",
+    "build_residue_graph",
+    "coerce_protein_graph",
+]

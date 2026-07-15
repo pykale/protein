@@ -48,7 +48,7 @@ from kaleprotein.auto import (
 )
 
 # 1. Load a processed CATH graph or PDB.
-record = AutoProteinData("InverseFolding/CATH", source="structure.pdb")[0]
+record = AutoProteinData("CATH/InverseFolding", source="structure.pdb")[0]
 
 # 2. Preprocess the backbone.
 preprocessor = AutoProteinPreprocessor("protein/structure")
@@ -96,9 +96,10 @@ marginal in `maps/train_marginal_x.json`.
 
 ## Data Compatibility
 
-`CATHGraphDataset` reads plain `.pt` graph dictionaries, directories, and PDB
-files. PDB preprocessing retains `N, CA, C, O` backbones; the release adapter
-constructs the virtual C-beta and expected geometric channels.
+`CATHDataset` reads plain `.pt` structure dictionaries, directories, PDB files,
+and mmCIF files into model-independent structure records. MapDiff's example-local
+data layer then constructs residue graphs, paired IPA batches, the virtual C-beta,
+and the expected geometric channels.
 
 Raw PDBs do not provide the normalized solvent-accessibility, B-factor, or DSSP
 channels used during upstream CATH training, so those channels are zero-filled.

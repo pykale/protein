@@ -6,23 +6,23 @@ directory.
 
 ## Add Reusable Data
 
-Dataset loaders belong in `core/data/datasets/` and register a stable id. Name
-modules for the dataset family or domain rather than mirroring the modeling
-tree:
+Built-in dataset adapters live directly in `core/data/<dataset>.py` and register
+a stable `Dataset/Task` id. Fundamental readers such as FASTA, tabular, PDB, and
+mmCIF parsing belong in `core/data/utils/`:
 
 ```python
 from kaleprotein.core.registry import DATASET_REGISTRY
 
 
-@DATASET_REGISTRY.register("DTI/MyDataset")
-def load_my_dataset(path, split="train"):
-    return MyDataset(path=path, split=split)
+@DATASET_REGISTRY.register("MyDataset/DTI")
+class MyDataset(DTIDataset):
+    ...
 ```
 
 Every compatible model can then use:
 
 ```python
-data = AutoProteinData("DTI/MyDataset", path="data.csv", split="test")
+data = AutoProteinData("MyDataset/DTI", path="data.csv", split="test")
 ```
 
 Dataset loaders should normalize task fields and preserve provenance. They
@@ -30,7 +30,8 @@ must not import a concrete model.
 
 ## Add A Reusable Preprocessor
 
-Reusable transformations belong in `core/data/preprocessors/`:
+Reusable transformations belong in `core/preprocessing/`, outside the loading
+and parsing layer:
 
 ```python
 from kaleprotein.core.registry import PREPROCESSOR_REGISTRY

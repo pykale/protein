@@ -28,7 +28,7 @@ def main(argv=None):
     torch.manual_seed(args.seed)
 
     # 1. Load, preprocess, and collate evaluation structures.
-    dataset = AutoProteinData("InverseFolding/CATH", source=args.data)
+    dataset = AutoProteinData("CATH/InverseFolding", source=args.data)
     preprocessor = AutoProteinPreprocessor("protein/structure")
     processed = {"samples": [preprocessor.featurize(record) for record in dataset]}
     # 2. Build one complete model and load the selected checkpoint.

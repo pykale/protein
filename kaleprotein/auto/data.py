@@ -4,12 +4,13 @@ from collections.abc import Mapping
 
 
 class AutoProteinData:
-    """Load a reusable dataset directly by its public identifier."""
+    """Load a reusable dataset by its ``Dataset/Task`` identifier."""
 
     def __new__(cls, data_id, *args, **kwargs):
         import kaleprotein  # noqa: F401 - bootstrap dataset registrations
         from kaleprotein.core.registry import DATASET_REGISTRY
 
+        _validate_data_id(data_id)
         loader = DATASET_REGISTRY.get(data_id)
         if not callable(loader):
             if args or kwargs:
@@ -21,6 +22,7 @@ class AutoProteinData:
     def register(cls, data_id, loader=None, *, aliases=()):
         from kaleprotein.core.registry import DATASET_REGISTRY
 
+        _validate_data_id(data_id)
         return DATASET_REGISTRY.register(data_id, loader, aliases=aliases)
 
 
@@ -45,6 +47,16 @@ class AutoProteinDataLoader:
 
     def load(self):
         return AutoProteinData(self.data_id, **self.loader_kwargs)
+
+
+def _validate_data_id(data_id):
+    if not isinstance(data_id, str):
+        raise TypeError(f"Dataset id must be a string, got {type(data_id).__name__}.")
+    parts = [part.strip() for part in data_id.split("/")]
+    if len(parts) != 2 or not all(parts):
+        raise ValueError(
+            f"Dataset id must use 'Dataset/Task' format, got {data_id!r}."
+        )
 
 
 __all__ = ["AutoProteinData", "AutoProteinDataLoader"]

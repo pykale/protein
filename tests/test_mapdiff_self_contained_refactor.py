@@ -7,9 +7,10 @@ import torch
 from kaleprotein.auto import AutoProteinConfig, AutoProteinModel
 from examples.mapdiff_inverse_folding.modeling import MapDiffModel
 from examples.mapdiff_inverse_folding.upstream_compat import UpstreamMapDiff
-from kaleprotein.core.data.collators.inverse_folding import CollatorDiff, CollatorIPAPretrain
-from kaleprotein.core.data.datasets.inverse_folding import CATHGraphDataset, build_residue_graph
-from kaleprotein.core.data.preprocessors.structure import BackboneCoordinateProcessor
+from examples.mapdiff_inverse_folding.collators import CollatorDiff, CollatorIPAPretrain
+from examples.mapdiff_inverse_folding.data import build_residue_graph
+from kaleprotein.core.data.cath import CATHDataset
+from kaleprotein.core.preprocessing.structure import BackboneCoordinateProcessor
 from kaleprotein.core.evaluation.tasks.inverse_folding.interpreters import DenoisingTrajectoryInterpreter
 from kaleprotein.core.evaluation.tasks.inverse_folding.metrics import Diversity, Perplexity, SequenceRecovery
 
@@ -106,10 +107,10 @@ def _tiny_upstream_config(tmp_path, filename="upstream.pt"):
 def test_processed_pt_and_pdb_backbone_loading(tmp_path):
     pt_path = tmp_path / "fake_cath.pt"
     torch.save({"graphs": [{"atom_pos": _coords(3), "sequence": "ACD", "id": "fake"}]}, pt_path)
-    dataset = CATHGraphDataset(pt_path)
+    dataset = CATHDataset(pt_path)
     assert len(dataset) == 1
     assert dataset[0].atom_pos.shape == (3, 4, 3)
-    assert dataset[0].edge_attr.shape[-1] == 9
+    assert dataset[0].atom_mask.shape == (3, 4)
 
     pdb_path = tmp_path / "tiny.pdb"
     pdb_path.write_text(

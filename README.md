@@ -36,9 +36,14 @@ kaleprotein/
     interpretation.py
   core/                         # reusable building blocks
     data/
-      preprocessors/            # sequence, molecule, structure transforms
-      datasets/                 # reusable dataset loaders
-      collators/                # reusable batch construction
+      utils/                    # FASTA, CSV/TSV, PDB, and mmCIF parsing
+      base.py                   # shared dataset contracts
+      schemas.py                # stable sample and structure records
+      bindingdb.py              # one module per built-in dataset
+      biosnap.py
+      human.py
+      cath.py
+    preprocessing/              # reusable transforms, separate from loading
     modeling/
       modalities/               # reusable encoders and neural layers
       tasks/                    # fusion, heads, predictors, generators
@@ -98,7 +103,7 @@ from kaleprotein.auto import (
 
 # 1. Load reusable DTI data.
 data = AutoProteinData(
-    "DTI/BindingDB",
+    "BindingDB/DTI",
     root="path/to/DrugBAN/datasets",
     split="random",
     subset="test",
@@ -186,7 +191,7 @@ from kaleprotein.auto import (
 )
 
 # 1. Load a PDB or processed CATH graph.
-record = AutoProteinData("InverseFolding/CATH", source="structure.pdb")[0]
+record = AutoProteinData("CATH/InverseFolding", source="structure.pdb")[0]
 
 # 2. Preprocess the structure condition.
 preprocessor = AutoProteinPreprocessor("protein/structure")
@@ -233,15 +238,16 @@ See the [MapDiff example README](examples/mapdiff_inverse_folding/README.md).
 
 ## Reusable DTI Data
 
-BindingDB, Human, and BioSNAP share one model-independent CSV loader:
+BindingDB, Human, and BioSNAP provide dataset-specific classes over one
+model-independent DTI CSV base class:
 
 ```python
-bindingdb = AutoProteinData("DTI/BindingDB", root="path/to/datasets")
+bindingdb = AutoProteinData("BindingDB/DTI", root="path/to/datasets")
 human_train = AutoProteinData(
-    "DTI/Human", root="path/to/datasets", split="random", subset="train"
+    "Human/DTI", root="path/to/datasets", split="random", subset="train"
 )
 biosnap_test = AutoProteinData(
-    "DTI/BioSNAP", root="path/to/datasets", split="cluster", subset="target_test"
+    "BioSNAP/DTI", root="path/to/datasets", split="cluster", subset="target_test"
 )
 ```
 
