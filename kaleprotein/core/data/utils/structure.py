@@ -1,6 +1,6 @@
 """Shared helpers for text structure parsers."""
 
-from ..schemas import StructureRecord
+from ..records import StructureRecord
 
 
 BACKBONE_ATOMS = ("N", "CA", "C", "O")

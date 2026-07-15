@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from pathlib import Path
 
-from .schemas import DTISample
+from .records import DTISample
 from .utils import read_dict_rows, require_file, safe_path_part
 
 

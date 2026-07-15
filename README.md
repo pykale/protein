@@ -37,8 +37,8 @@ kaleprotein/
   core/                         # reusable building blocks
     data/
       utils/                    # FASTA, CSV/TSV, PDB, and mmCIF parsing
-      base.py                   # shared dataset contracts
-      schemas.py                # stable sample and structure records
+      datasets.py               # shared dataset contracts
+      records.py                # stable sample and structure records
       bindingdb.py              # one module per built-in dataset
       biosnap.py
       human.py

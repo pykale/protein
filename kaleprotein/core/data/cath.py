@@ -5,7 +5,7 @@ from pathlib import Path
 
 from kaleprotein.core.registry import DATASET_REGISTRY
 
-from .schemas import AMINO_ACID_ALPHABET, StructureRecord
+from .records import AMINO_ACID_ALPHABET, StructureRecord
 from .utils import parse_mmcif, parse_pdb, require_file
 
 

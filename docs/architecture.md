@@ -144,7 +144,7 @@ flowchart LR
   parsing functions.
 - `core/data/<dataset>.py` owns built-in dataset adapters such as BindingDB,
   BioSNAP, Human, and CATH. Public ids use `Dataset/Task` order.
-- `core/data/base.py` and `core/data/schemas.py` own shared dataset classes and
+- `core/data/datasets.py` and `core/data/records.py` own shared dataset classes and
   stable data records.
 - `core/preprocessing/` owns reusable transformations that prepare records for
   model inputs without becoming dataset loaders.
