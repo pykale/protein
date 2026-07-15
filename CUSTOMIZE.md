@@ -6,8 +6,9 @@ directory.
 
 ## Add Reusable Data
 
-Task datasets belong in `core/data/tasks/<task>/datasets.py` and register a stable
-id:
+Dataset loaders belong in `core/data/datasets/` and register a stable id. Name
+modules for the dataset family or domain rather than mirroring the modeling
+tree:
 
 ```python
 from kaleprotein.core.registry import DATASET_REGISTRY
@@ -29,7 +30,7 @@ must not import a concrete model.
 
 ## Add A Reusable Preprocessor
 
-Modality processors belong in `core/data/modalities/<modality>/processors.py`:
+Reusable transformations belong in `core/data/preprocessors/`:
 
 ```python
 from kaleprotein.core.registry import PREPROCESSOR_REGISTRY

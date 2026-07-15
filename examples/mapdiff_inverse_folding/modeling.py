@@ -10,8 +10,8 @@ import torch
 from torch import nn
 
 from kaleprotein.auto import AutoProteinEmbedder, AutoProteinPredictor
-from kaleprotein.core.data.tasks.inverse_folding.collators import CollatorDiff, CollatorIPAPretrain
-from kaleprotein.core.data.tasks.inverse_folding.datasets import (
+from kaleprotein.core.data.collators.inverse_folding import CollatorDiff, CollatorIPAPretrain
+from kaleprotein.core.data.datasets.inverse_folding import (
     DiffusionBatch,
     GraphBatch,
     coerce_protein_graph,

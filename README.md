@@ -36,8 +36,9 @@ kaleprotein/
     interpretation.py
   core/                         # reusable building blocks
     data/
-      modalities/               # sequence, molecule, structure preprocessing
-      tasks/                    # task datasets and collators
+      preprocessors/            # sequence, molecule, structure transforms
+      datasets/                 # reusable dataset loaders
+      collators/                # reusable batch construction
     modeling/
       modalities/               # reusable encoders and neural layers
       tasks/                    # fusion, heads, predictors, generators

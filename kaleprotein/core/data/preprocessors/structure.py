@@ -19,7 +19,7 @@ class BackboneCoordinateProcessor:
         self.chain = chain
 
     def transform(self, sample):
-        from kaleprotein.core.data.tasks.inverse_folding.datasets import (
+        from kaleprotein.core.data.datasets.inverse_folding import (
             coerce_protein_graph,
             parse_pdb_backbone,
         )

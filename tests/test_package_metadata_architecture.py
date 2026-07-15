@@ -50,13 +50,14 @@ def test_repository_uses_auto_core_examples_layers_only():
     package = root / "kaleprotein"
     assert (package / "auto" / "modeling.py").is_file()
     assert (package / "core" / "registry").is_dir()
-    assert (package / "core" / "data" / "modalities" / "sequence").is_dir()
-    assert (package / "core" / "data" / "tasks" / "dti").is_dir()
+    assert (package / "core" / "data" / "preprocessors" / "sequence.py").is_file()
+    assert (package / "core" / "data" / "preprocessors" / "molecule.py").is_file()
+    assert (package / "core" / "data" / "datasets" / "dti.py").is_file()
+    assert (package / "core" / "data" / "datasets" / "inverse_folding.py").is_file()
+    assert (package / "core" / "data" / "collators" / "inverse_folding.py").is_file()
     assert (package / "core" / "modeling" / "modalities" / "sequence").is_dir()
     assert (package / "core" / "modeling" / "tasks" / "dti").is_dir()
     assert (package / "core" / "evaluation" / "tasks" / "dti").is_dir()
-    assert (package / "core" / "data" / "modalities" / "molecule" / "processors.py").is_file()
-    assert (package / "core" / "data" / "tasks" / "inverse_folding" / "collators.py").is_file()
     assert (package / "core" / "modeling" / "modalities" / "sequence" / "embedders.py").is_file()
     assert (package / "core" / "modeling" / "tasks" / "dti" / "predictors.py").is_file()
     assert (package / "core" / "evaluation" / "tasks" / "dti" / "metrics.py").is_file()
@@ -70,6 +71,8 @@ def test_repository_uses_auto_core_examples_layers_only():
     assert not (package / "examples").exists()
     assert not (package / "tests").exists()
 
+    assert not any((package / "core" / "data" / "modalities").rglob("*.py"))
+    assert not any((package / "core" / "data" / "tasks").rglob("*.py"))
     assert not any((package / "core" / "modalities").rglob("*.py"))
     assert not any((package / "core" / "tasks").rglob("*.py"))
 

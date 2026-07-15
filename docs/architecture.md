@@ -19,7 +19,7 @@ flowchart TB
     subgraph PACKAGE["installed package: kaleprotein/"]
       subgraph CORE["core: shared and reusable"]
         direction LR
-        CORE_DATA["data/<br/>modalities + tasks"]
+        CORE_DATA["data/<br/>preprocessors + datasets + collators"]
         CORE_MODELING["modeling/<br/>modalities + tasks"]
         CORE_EVAL["evaluation/<br/>task metrics + interpretation"]
         REGISTRY["registry/"]
@@ -139,8 +139,9 @@ flowchart LR
 ## Ownership Rules
 
 - `auto/` owns generic dispatch only.
-- `core/data/modalities/` owns reusable modality processors.
-- `core/data/tasks/` owns reusable task datasets and collators.
+- `core/data/preprocessors/` owns reusable input transformations.
+- `core/data/datasets/` owns reusable dataset loaders.
+- `core/data/collators/` owns reusable batch construction.
 - `core/modeling/modalities/` owns reusable modality encoders and neural layers.
 - `core/modeling/tasks/` owns reusable fusion layers, heads, predictors, and
   generators.

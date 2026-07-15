@@ -48,6 +48,12 @@ jobs:
               names = archive.namelist()
 
           assert any(name.startswith("kaleprotein/") for name in names)
-          forbidden = ("kale_protein/", "examples/", "tests/")
+          forbidden = (
+              "kale_protein/",
+              "examples/",
+              "tests/",
+              "kaleprotein/core/data/modalities/",
+              "kaleprotein/core/data/tasks/",
+          )
           assert not any(name.startswith(forbidden) for name in names), names
           PY

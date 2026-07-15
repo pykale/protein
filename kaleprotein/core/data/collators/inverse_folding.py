@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from .datasets import DiffusionBatch, GraphBatch, IPABatch, ProteinGraph, coerce_protein_graph
+from ..datasets.inverse_folding import (
+    DiffusionBatch,
+    GraphBatch,
+    IPABatch,
+    ProteinGraph,
+    coerce_protein_graph,
+)
 
 
 def _torch():

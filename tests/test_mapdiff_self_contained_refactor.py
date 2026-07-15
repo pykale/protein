@@ -7,9 +7,9 @@ import torch
 from kaleprotein.auto import AutoProteinConfig, AutoProteinModel
 from examples.mapdiff_inverse_folding.modeling import MapDiffModel
 from examples.mapdiff_inverse_folding.upstream_compat import UpstreamMapDiff
-from kaleprotein.core.data.modalities.structure.processors import BackboneCoordinateProcessor
-from kaleprotein.core.data.tasks.inverse_folding.collators import CollatorDiff, CollatorIPAPretrain
-from kaleprotein.core.data.tasks.inverse_folding.datasets import CATHGraphDataset, build_residue_graph
+from kaleprotein.core.data.collators.inverse_folding import CollatorDiff, CollatorIPAPretrain
+from kaleprotein.core.data.datasets.inverse_folding import CATHGraphDataset, build_residue_graph
+from kaleprotein.core.data.preprocessors.structure import BackboneCoordinateProcessor
 from kaleprotein.core.evaluation.tasks.inverse_folding.interpreters import DenoisingTrajectoryInterpreter
 from kaleprotein.core.evaluation.tasks.inverse_folding.metrics import Diversity, Perplexity, SequenceRecovery
 

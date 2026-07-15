@@ -1,6 +1,6 @@
 from kaleprotein.auto import AutoProteinModel
-from kaleprotein.core.data.tasks.inverse_folding.collators import CollatorDiff
-from kaleprotein.core.data.tasks.inverse_folding.datasets import build_residue_graph
+from kaleprotein.core.data.collators.inverse_folding import CollatorDiff
+from kaleprotein.core.data.datasets.inverse_folding import build_residue_graph
 
 
 def test_mapdiff_complete_model_generates():
