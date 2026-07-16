@@ -12,11 +12,21 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from kaleprotein.auto import AutoProteinConfig, AutoProteinModel, AutoProteinPreprocessor
-from examples.drugban_dti._cli import (
-    LazyPreprocessedDataset, add_data_arguments, load_dataset,
-    load_requested_checkpoint, print_json, resolve_device, seed_everything,
+from kaleprotein.auto import (
+    AutoProteinConfig,
+    AutoProteinDataLoader,
+    AutoProteinInterpreter,
+    AutoProteinModel,
 )
+from examples._utils import move_to_device
+from examples.drugban_dti._cli import (
+    add_data_arguments,
+    print_json,
+    resolve_device,
+    seed_everything,
+)
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     add_data_arguments(parser)
@@ -30,36 +40,63 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     seed_everything(args.seed)
 
-    # 1. Load and preprocess the held-out split.
-    dataset = load_dataset(args)
+    # 1. Load, preprocess, collate, and batch normalized DTI records.
+    if not args.root and not args.path:
+        raise ValueError("Pass --root with a DrugBAN dataset tree or --path with a DTI CSV")
     config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
-    preprocessor = AutoProteinPreprocessor.from_config(config)
-    processed = LazyPreprocessedDataset(dataset, preprocessor)
-
-    # 2. Build the full model, load weights, and collate batches.
-    model = AutoProteinModel("DTI/DrugBAN", pretrain=args.pretrain)
-    model.to(resolve_device(args.device))
-    load_requested_checkpoint(model, args)
-    loader = model.make_dataloader(
-        processed, batch_size=args.batch_size, num_workers=args.num_workers
+    loader = AutoProteinDataLoader(
+        f"{args.dataset}/DTI",
+        config=config,
+        root=args.root,
+        path=args.path,
+        split=args.split,
+        subset=args.subset,
+        limit=args.limit,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
     )
+
+    # 2. Build the complete model and load requested weights.
+    device = resolve_device(args.device)
+    model = AutoProteinModel(
+        "DTI/DrugBAN",
+        pretrain=args.pretrain,
+        checkpoint=args.checkpoint,
+    ).to(device)
+    interpreter = AutoProteinInterpreter.from_config(config)
+    model.eval()
+
+    # 3. Embed, predict, and collect named outputs for every batch.
     probabilities = []
     labels = []
-    model.eval()
+    interpreted_samples = []
+    interpreted_attention = []
     with torch.no_grad():
-        for batch in loader:
-            # 3. Embed protein and molecule streams, then predict interactions.
-            embeddings = model.embed(**batch)
-            output = model.predictor(**embeddings)
-            probabilities.append(output["probabilities"].detach().cpu())
-            labels.append(output["labels"].detach().cpu())
-    # 4. Compute evaluation-only metrics.
-    prediction = {
-        "probabilities": torch.cat(probabilities),
-        "labels": torch.cat(labels),
+        for inputs in loader:
+            inputs = move_to_device(inputs, device)
+            embeddings = model.embed(**inputs)
+            prediction = model.predictor(**embeddings)
+            probabilities.append(prediction["probabilities"].detach().cpu())
+            labels.append(prediction["labels"].detach().cpu())
+            attention = model.extract_attention(**prediction)
+            interpreted = interpreter.explain(**attention)
+            interpreted_samples.extend(interpreted["samples"])
+            interpreted_attention.extend(interpreted["attention"])
+    if not probabilities:
+        raise ValueError("Cannot evaluate an empty DTI dataset.")
+
+    # 4. Evaluate or expose attention from the collected mappings.
+    metrics = model.evaluate(
+        probabilities=torch.cat(probabilities),
+        labels=torch.cat(labels),
+        threshold=args.threshold,
+    )
+    interpretation = {
+        "samples": interpreted_samples,
+        "attention": interpreted_attention,
     }
-    metrics = model.evaluate(**prediction, threshold=args.threshold)
-    print_json(metrics)
+    result = {"metrics": metrics, "interpretation": interpretation}
+    print_json(result)
     return metrics
 
 

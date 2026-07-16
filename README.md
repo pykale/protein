@@ -95,33 +95,32 @@ The normal user entry point is one complete model:
 ```python
 from kaleprotein.auto import (
     AutoProteinConfig,
-    AutoProteinData,
+    AutoProteinDataLoader,
     AutoProteinInterpreter,
     AutoProteinModel,
-    AutoProteinPreprocessor,
 )
 
-# 1. Load reusable DTI data.
-data = AutoProteinData(
+# 1. Select the model card shared by data and model composition.
+config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
+
+# 2. Load, preprocess, collate, and batch reusable DTI data.
+loader = AutoProteinDataLoader(
     "BindingDB/DTI",
+    config=config,
     root="path/to/DrugBAN/datasets",
     split="random",
     subset="test",
+    batch_size=64,
 )
+inputs = next(iter(loader))
 
-# 2. Preprocess molecule and protein streams from the model card.
-config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
-preprocessor = AutoProteinPreprocessor.from_config(config)
-processed = preprocessor.transform_dataset(list(data)[:8])
+# 3. Build the complete model and load requested weights.
+model = AutoProteinModel.from_config(config, checkpoint="drugban.pt")
 
-# 3. Build the complete model and collate a batch.
-model = AutoProteinModel("DTI/DrugBAN", pretrain=False)
-batch = model.collator(**processed)
+# 4. Pass loader outputs directly into the registered embedders.
+embeddings = model.embed(**inputs)
 
-# 4. Embed with the model's registered modality encoders.
-embeddings = model.embed(**batch)
-
-# 5. Predict with the model's registered DTI task head.
+# 5. Pass named embeddings into the registered predictor.
 prediction = model.predictor(**embeddings)
 
 # 6. Evaluate or interpret when needed.
@@ -129,6 +128,11 @@ metrics = model.evaluate(**prediction)
 attention = model.extract_attention(**prediction)
 interpretation = AutoProteinInterpreter.from_config(config).explain(**attention)
 ```
+
+`AutoProteinDataLoader` exposes `.dataset`, `.preprocessor`, `.processed`,
+`.collator`, and `.loader`. It composes the data side from configuration but
+never creates or retains a model instance. Every yielded mapping is a valid
+`model.embed(**inputs)` keyword input.
 
 Every public stage returns a dictionary, and the next stage consumes named
 fields with `**`. DrugBAN's embedding contract includes
@@ -184,50 +188,49 @@ component is a generator:
 
 ```python
 from kaleprotein.auto import (
-    AutoProteinData,
+    AutoProteinConfig,
+    AutoProteinDataLoader,
     AutoProteinInterpreter,
     AutoProteinModel,
-    AutoProteinPreprocessor,
 )
 
-# 1. Load a PDB or processed CATH graph.
-record = AutoProteinData("CATH/InverseFolding", source="structure.pdb")[0]
+# 1. Select one shared model configuration.
+config = AutoProteinConfig.from_pretrained("InverseFolding/MapDiff")
 
-# 2. Preprocess the structure condition.
-preprocessor = AutoProteinPreprocessor("protein/structure")
-structure = preprocessor.featurize(
-    {
-        "backbone_coords": record.atom_pos,
-        "sequence": record.sequence,
-        "id": record.identifier,
-    }
+# 2. Load and prepare a PDB or processed CATH graph.
+loader = AutoProteinDataLoader(
+    "CATH/InverseFolding",
+    config=config,
+    source="structure.pdb",
+    batch_size=1,
 )
-processed = {"samples": [structure]}
+inputs = next(iter(loader))
 
-# 3. Load one complete model and collate named inputs.
-model = AutoProteinModel("InverseFolding/MapDiff", pretrain=True)
-batch = model.collator(**processed)
+# 3. Load one complete model.
+model = AutoProteinModel.from_config(config, pretrain=True)
 
-# 4. Encode the condition, then generate a sequence.
-conditioning = model.embed(**batch)
+# 4. Encode structure conditions from the loader mapping.
+embeddings = model.embed(**inputs)
+
+# 5. Generate from the named embedding mapping.
 generation = model.predictor.generate(
-    **conditioning,
+    **embeddings,
     steps=100,
     method="ddim",
 )
 metrics = model.evaluate(**generation)
-trajectory = AutoProteinInterpreter.from_config(model.config).explain(**generation)
+interpretation = AutoProteinInterpreter.from_config(config).explain(**generation)
 ```
 
-`pretrain=True` selects the release-compatible architecture, checks the local
-card `weights/` directory, and downloads the configured MapDiff v1.0.1 weight
-only when absent. The complete model loads that checkpoint exactly once.
+`pretrain=True` makes `AutoProteinModel` select the release checkpoint, check
+the card's local `weights/` directory, download the configured MapDiff v1.0.1
+weight only when absent, and invoke the model's checkpoint state adapter once.
 
 ```bash
 python -m examples.mapdiff_inverse_folding.pretrain_ipa \
   /data/cath/train --output ipa.pt
 python -m examples.mapdiff_inverse_folding.train_diffusion \
-  /data/cath/train --ipa-checkpoint ipa.pt --output mapdiff.pt
+  /data/cath/train --checkpoint ipa.pt --output mapdiff.pt
 python -m examples.mapdiff_inverse_folding.evaluate \
   /data/cath/test --pretrained
 python -m examples.mapdiff_inverse_folding.generate \
@@ -242,6 +245,8 @@ BindingDB, Human, and BioSNAP provide dataset-specific classes over one
 model-independent DTI CSV base class:
 
 ```python
+from kaleprotein.auto import AutoProteinData
+
 bindingdb = AutoProteinData("BindingDB/DTI", root="path/to/datasets")
 human_train = AutoProteinData(
     "Human/DTI", root="path/to/datasets", split="random", subset="train"

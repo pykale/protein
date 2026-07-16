@@ -10,6 +10,8 @@ local training and tests, without importing the upstream checkout at runtime.
 mapdiff_inverse_folding/
   config.yaml
   configuration.py
+  collators.py
+  data.py
   modeling.py
   egnn.py
   ipa.py
@@ -34,54 +36,57 @@ MapDiffModel
 
 The predictor is the diffusion generator and owns the learned denoising
 network. The embedder is a non-owning condition-encoding view, so parameters
-and checkpoint keys are not duplicated. `MapDiffModel` is the only full
-checkpoint owner.
+and checkpoint keys are not duplicated. `AutoProteinModel` resolves and loads
+the requested full checkpoint once; `MapDiffModel` only adapts checkpoint state
+to the selected parameter tree.
 
-## Generation Pipeline
+## Evaluation And Generation Pipeline
 
 ```python
 from kaleprotein.auto import (
-    AutoProteinData,
+    AutoProteinConfig,
+    AutoProteinDataLoader,
     AutoProteinInterpreter,
     AutoProteinModel,
-    AutoProteinPreprocessor,
 )
 
-# 1. Load a processed CATH graph or PDB.
-record = AutoProteinData("CATH/InverseFolding", source="structure.pdb")[0]
+# 1. Load the model card shared by the data and model sides.
+config = AutoProteinConfig.from_pretrained("InverseFolding/MapDiff")
 
-# 2. Preprocess the backbone.
-preprocessor = AutoProteinPreprocessor("protein/structure")
-structure = preprocessor.featurize(
-    {
-        "backbone_coords": record.atom_pos,
-        "sequence": record.sequence,
-        "id": record.identifier,
-    }
+# 2. Load, preprocess, collate, and batch inverse-folding records.
+loader = AutoProteinDataLoader(
+    "CATH/InverseFolding",
+    config=config,
+    source="structure.pdb",
+    batch_size=1,
 )
+inputs = next(iter(loader))
 
-# 3. Load one complete model and build its named batch mapping.
-model = AutoProteinModel("InverseFolding/MapDiff", pretrain=True)
-processed = {"samples": [structure]}
-batch = model.collator(**processed)
+# 3. Build the complete model and resolve its pretrained checkpoint.
+model = AutoProteinModel.from_config(config, pretrain=True)
 
-# 4. Encode the structural condition.
-conditioning = model.embed(**batch)
+# 4. Encode structure conditions from the loader mapping.
+embeddings = model.embed(**inputs)
 
-# 5. Run iterative sequence generation and evaluation.
+# 5. Generate from the named embedding mapping.
 generation = model.predictor.generate(
-    **conditioning,
+    **embeddings,
     steps=100,
     method="ddim",
     num_samples=1,
 )
+
+# 6. Evaluate or interpret the generation mapping.
 metrics = model.evaluate(**generation)
-trajectory = AutoProteinInterpreter.from_config(model.config).explain(**generation)
+interpretation = AutoProteinInterpreter.from_config(config).explain(**generation)
 ```
 
 Generation returns sequences, logits, token ids, and a non-empty denoising
 trajectory. It also carries `reference_sequences` from the condition mapping,
 so generation metrics can consume the dictionary directly.
+
+The loader does not invoke MapDiff. It only guarantees that each yielded
+mapping can enter `model.embed(**inputs)` directly.
 
 ## Architectures
 
@@ -114,7 +119,7 @@ python -m examples.mapdiff_inverse_folding.pretrain_ipa \
   /data/cath/train --output ipa.pt
 
 python -m examples.mapdiff_inverse_folding.train_diffusion \
-  /data/cath/train --ipa-checkpoint ipa.pt --output mapdiff.pt
+  /data/cath/train --checkpoint ipa.pt --output mapdiff.pt
 
 python -m examples.mapdiff_inverse_folding.evaluate \
   /data/cath/test --pretrained
@@ -123,7 +128,7 @@ python -m examples.mapdiff_inverse_folding.generate \
   structure.pdb --pretrained --steps 100
 ```
 
-- `pretrain_ipa.py` trains the masking prior.
+- `pretrain_ipa.py` trains the masking prior and saves a complete model checkpoint.
 - `train_diffusion.py` trains the full lightweight diffusion model.
 - `evaluate.py` reports sequence recovery, perplexity, and diversity.
 - `generate.py` preprocesses a structure and samples sequences.

@@ -6,7 +6,13 @@ from pathlib import Path
 
 import torch
 
-from kaleprotein.auto import AutoProteinData, AutoProteinModel, AutoProteinPreprocessor
+from kaleprotein.auto import (
+    AutoProteinConfig,
+    AutoProteinDataLoader,
+    AutoProteinInterpreter,
+    AutoProteinModel,
+)
+from examples._utils import move_to_device
 
 
 def build_parser():
@@ -18,6 +24,8 @@ def build_parser():
     parser.add_argument("--steps", type=int, default=50)
     parser.add_argument("--method", choices=("ddim", "ddpm"), default="ddim")
     parser.add_argument("--num-samples", type=int, default=1)
+    parser.add_argument("--batch-size", type=int, default=8)
+    parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--seed", type=int, default=42)
     return parser
@@ -27,31 +35,65 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     torch.manual_seed(args.seed)
 
-    # 1. Load, preprocess, and collate evaluation structures.
-    dataset = AutoProteinData("CATH/InverseFolding", source=args.data)
-    preprocessor = AutoProteinPreprocessor("protein/structure")
-    processed = {"samples": [preprocessor.featurize(record) for record in dataset]}
-    # 2. Build one complete model and load the selected checkpoint.
-    model = AutoProteinModel("InverseFolding/MapDiff", pretrain=args.pretrained).to(args.device)
-    if args.checkpoint:
-        model.load_compatible_checkpoint(args.checkpoint)
-    model.eval()
-    batch = model.collator(**processed)
-    batch["batch"] = batch["batch"].to(args.device)
-
-    # 3. Encode structural conditions and generate sequences.
-    conditioning = model.embed(**batch)
-    output = model.predictor.generate(
-        **conditioning,
-        sampling_config={
-            "steps": args.steps,
-            "method": args.method,
-            "num_samples": args.num_samples,
-        },
+    # 1. Load, preprocess, collate, and batch inverse-folding records.
+    config = AutoProteinConfig.from_pretrained("InverseFolding/MapDiff")
+    loader = AutoProteinDataLoader(
+        "CATH/InverseFolding",
+        config=config,
+        source=args.data,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
     )
-    # 4. Evaluate generation quality.
-    metrics = model.evaluate(**output)
-    print(json.dumps(metrics, indent=2))
+
+    # 2. Build the complete model and load requested weights.
+    model = AutoProteinModel(
+        "InverseFolding/MapDiff",
+        pretrain=args.pretrained,
+        checkpoint=args.checkpoint,
+    ).to(args.device)
+    interpreter = AutoProteinInterpreter.from_config(config)
+    model.eval()
+
+    # 3. Embed structural conditions and generate sequences for every batch.
+    sequences = []
+    recovery_references = []
+    perplexity_references = []
+    logits = []
+    interpretations = []
+    with torch.no_grad():
+        for inputs in loader:
+            inputs = move_to_device(inputs, args.device)
+            embeddings = model.embed(**inputs)
+            generation = model.predictor.generate(
+                **embeddings,
+                steps=args.steps,
+                method=args.method,
+                num_samples=args.num_samples,
+            )
+            references = list(generation["reference_sequences"])
+            sequences.extend(generation["sequences"])
+            recovery_references.extend(references * args.num_samples)
+            perplexity_references.extend(references)
+            if generation.get("logits") is not None:
+                logits.append(generation["logits"].detach().cpu())
+            interpretations.append(interpreter.explain(**generation))
+    if not sequences:
+        raise ValueError("Cannot evaluate an empty inverse-folding dataset.")
+
+    # 4. Evaluate and interpret the collected generation mapping.
+    collected = {
+        "sequences": sequences,
+        "reference_sequences": recovery_references,
+        "perplexity_reference_sequences": perplexity_references,
+        "logits": torch.cat(logits) if logits else None,
+    }
+    metrics = model.evaluate(**collected)
+    interpretation = {
+        "batches": interpretations,
+        "final_sequences": sequences,
+    }
+    result = {"metrics": metrics, "interpretation": interpretation}
+    print(json.dumps(result, indent=2))
     return metrics
 
 

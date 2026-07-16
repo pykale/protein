@@ -1,3 +1,4 @@
+from .collation import AutoProteinCollator
 from .configuration import AutoProteinConfig
 from .data import AutoProteinData, AutoProteinDataLoader
 from .evaluation import AutoProteinEvaluator
@@ -7,6 +8,7 @@ from .preprocessing import AutoMoleculePreprocessor, AutoProteinPreprocessor
 
 __all__ = [
     "AutoMoleculePreprocessor",
+    "AutoProteinCollator",
     "AutoProteinConfig",
     "AutoProteinData",
     "AutoProteinDataLoader",

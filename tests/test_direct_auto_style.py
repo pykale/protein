@@ -1,3 +1,4 @@
+import ast
 import builtins
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -5,13 +6,11 @@ from tempfile import TemporaryDirectory
 import torch
 
 from kaleprotein.auto import (
-    AutoMoleculePreprocessor,
     AutoProteinConfig,
-    AutoProteinData,
+    AutoProteinDataLoader,
     AutoProteinEvaluator,
     AutoProteinInterpreter,
     AutoProteinModel,
-    AutoProteinPreprocessor,
 )
 from kaleprotein.core.weights import resolve_pretrained_weight
 
@@ -25,6 +24,65 @@ def test_model_ids_are_card_driven_not_auto_hardcoded():
 
     config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
     assert config["auto_map"]["AutoProteinModel"] == "modeling.DrugBANModel"
+
+
+def test_example_evaluations_expose_the_named_auto_pipeline():
+    root = Path(__file__).resolve().parents[1]
+    scripts = {
+        "examples/drugban_dti/evaluate.py": "prediction = model.predictor(**embeddings)",
+        "examples/mapdiff_inverse_folding/evaluate.py": (
+            "generation = model.predictor.generate("
+        ),
+    }
+
+    for relative_path, prediction_stage in scripts.items():
+        source = (root / relative_path).read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        assert any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "AutoProteinDataLoader"
+            for node in ast.walk(tree)
+        )
+        for stage in (
+            "loader = AutoProteinDataLoader(",
+            "for inputs in loader:",
+            "embeddings = model.embed(**inputs)",
+            prediction_stage,
+            "metrics = model.evaluate(",
+            "AutoProteinInterpreter.from_config(config)",
+        ):
+            assert stage in source, f"{relative_path} is missing the visible stage: {stage}"
+
+
+def test_all_workflows_keep_embedder_and_predictor_stages_explicit():
+    root = Path(__file__).resolve().parents[1]
+    scripts = {
+        "examples/drugban_dti/train.py": "model.predictor(**embeddings)",
+        "examples/drugban_dti/evaluate.py": "model.predictor(**embeddings)",
+        "examples/drugban_dti/predict.py": "model.predictor(**embeddings)",
+        "examples/drugban_dti/interpret.py": "model.predictor(**embeddings)",
+        "examples/mapdiff_inverse_folding/pretrain_ipa.py": (
+            "model.predictor(**embeddings)"
+        ),
+        "examples/mapdiff_inverse_folding/train_diffusion.py": (
+            "model.predictor(**embeddings)"
+        ),
+        "examples/mapdiff_inverse_folding/evaluate.py": (
+            "model.predictor.generate("
+        ),
+        "examples/mapdiff_inverse_folding/generate.py": (
+            "model.predictor.generate("
+        ),
+    }
+
+    for relative_path, predictor_stage in scripts.items():
+        source = (root / relative_path).read_text(encoding="utf-8")
+        assert "AutoProteinDataLoader(" in source
+        assert "for inputs in loader:" in source
+        assert "model.embed(**inputs)" in source
+        assert predictor_stage in source
+        assert "model(**inputs)" not in source
 
 
 def test_model_cards_do_not_require_pyyaml(monkeypatch):
@@ -46,20 +104,20 @@ def test_drugban_direct_pipeline_style(fake_rdkit_graph, tmp_path):
     dataset_dir = tmp_path / "bindingdb"
     dataset_dir.mkdir()
     (dataset_dir / "full.csv").write_text(
-        "SMILES,Protein,Y\nCCO,MKTFFVLLLMKTFFVLLL,1\n", encoding="utf-8"
+        "SMILES,Protein,Y\n"
+        "CCO,MKTFFVLLLMKTFFVLLL,0\n"
+        "CCN,MKTFFVLLLMKTFFVLLL,1\n",
+        encoding="utf-8",
     )
-    sample = AutoProteinData("BindingDB/DTI", root=tmp_path)[0]
-    protein_data = AutoProteinPreprocessor("protein/sequence").tokenize(sample)
-    molecule_data = AutoMoleculePreprocessor("molecule/SMILE").featurize(sample)
-    model = AutoProteinModel("DTI/DrugBAN", pretrain=False)
-
-    processed = {
-        "samples": [
-            {"target": protein_data, "drug": molecule_data, "label": 0},
-            {"target": protein_data, "drug": molecule_data, "label": 1},
-        ]
-    }
-    batch = model.collator(**processed)
+    config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
+    loader = AutoProteinDataLoader(
+        "BindingDB/DTI",
+        config=config,
+        root=tmp_path,
+        batch_size=2,
+    )
+    batch = next(iter(loader))
+    model = AutoProteinModel.from_config(config)
     embeddings = model.embed(**batch)
     prediction = model.predictor(**embeddings)
 
@@ -75,7 +133,7 @@ def test_drugban_direct_pipeline_style(fake_rdkit_graph, tmp_path):
     auto_metrics = AutoProteinEvaluator.from_config(model.config).evaluate(**prediction)
     interpretation = AutoProteinInterpreter.from_config(model.config).explain(**attention)
 
-    assert sample["label"] == 1
+    assert loader.dataset[1]["label"] == 1
     assert embeddings["protein_embedding"].shape[0] == 2
     assert embeddings["molecule_embedding"].shape[0] == 2
     assert "probabilities" in prediction
@@ -84,6 +142,8 @@ def test_drugban_direct_pipeline_style(fake_rdkit_graph, tmp_path):
     assert set(auto_metrics) == {"auroc", "auprc", "f1", "accuracy", "threshold"}
     assert attention["attention"].shape[0] == 2
     assert len(interpretation["samples"]) == 2
+    assert not hasattr(model, "collator")
+    assert not hasattr(model, "make_dataloader")
     assert set(model.state_dict()) == {
         *[key for key in model.state_dict() if key.startswith("protein_embedder.")],
         *[key for key in model.state_dict() if key.startswith("molecule_embedder.")],
@@ -146,24 +206,27 @@ def test_mapdiff_direct_generative_pipeline_style(tmp_path):
         },
         tmp_path / "protein.pt",
     )
-    graph = AutoProteinData("CATH/InverseFolding", source=tmp_path)[0]
-    structure_data = AutoProteinPreprocessor("protein/structure").featurize(
-        {"backbone_coords": graph.atom_pos, "sequence": graph.sequence}
+    config = AutoProteinConfig.from_pretrained("InverseFolding/MapDiff")
+    loader = AutoProteinDataLoader(
+        "CATH/InverseFolding",
+        config=config,
+        source=tmp_path,
     )
-    model = AutoProteinModel("InverseFolding/MapDiff", pretrain=False)
-
-    processed = {"samples": [structure_data]}
-    batch = model.collator(**processed)
+    batch = next(iter(loader))
+    model = AutoProteinModel.from_config(config)
     conditioning = model.embed(**batch)
     generated = model.predictor.generate(**conditioning, steps=1)
+    training_output = model.predictor(**conditioning)
     metrics = model.evaluate(**generated)
     auto_metrics = AutoProteinEvaluator.from_config(model.config).evaluate(**generated)
     interpretation = AutoProteinInterpreter.from_config(model.config).explain(**generated)
 
-    assert graph.sequence == "MA"
+    assert loader.dataset[0].sequence == "MA"
     assert "structure_embedding" in conditioning
+    assert "loss" in training_output
     assert generated["sequences"]
     assert set(metrics) == {"sequence_recovery", "perplexity", "diversity"}
     assert set(auto_metrics) == {"sequence_recovery", "perplexity", "diversity"}
     assert interpretation["final_sequences"] == generated["sequences"]
+    assert not hasattr(model, "collator")
     assert all(key.startswith("predictor.network.") for key in model.state_dict())

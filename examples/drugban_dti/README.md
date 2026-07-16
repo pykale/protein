@@ -10,7 +10,8 @@ on the upstream checkout, DGL, and DGL-LifeSci.
 drugban_dti/
   config.yaml          component ids, dimensions, training and weight metadata
   configuration.py     DrugBANConfig
-  modeling.py          complete model, collation, training, checkpoint adapter
+  collators.py         DrugBAN-specific tensor batching
+  modeling.py          pure model computation and checkpoint state adapter
   train.py
   evaluate.py
   predict.py
@@ -28,41 +29,41 @@ DrugBANModel
   AutoProteinPredictor("dti/ban")
 ```
 
-`DrugBANModel` alone owns full checkpoints. The component factories do not
-create or load another DrugBAN network.
+`AutoProteinModel` resolves and loads a requested full checkpoint once.
+`DrugBANModel` implements only model-state serialization and compatibility;
+component factories do not create or load another DrugBAN network.
 
 ## Evaluation Pipeline
 
 ```python
 from kaleprotein.auto import (
     AutoProteinConfig,
-    AutoProteinData,
+    AutoProteinDataLoader,
     AutoProteinInterpreter,
     AutoProteinModel,
-    AutoProteinPreprocessor,
 )
 
-# 1. Load normalized DTI records.
-data = AutoProteinData(
+# 1. Load the model card shared by the data and model sides.
+config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
+
+# 2. Load, preprocess, collate, and batch normalized DTI records.
+loader = AutoProteinDataLoader(
     "BindingDB/DTI",
+    config=config,
     root="path/to/DrugBAN/datasets",
     split="random",
     subset="test",
+    batch_size=64,
 )
+inputs = next(iter(loader))
 
-# 2. Preprocess SMILES and protein sequences.
-config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
-preprocessor = AutoProteinPreprocessor.from_config(config)
-processed = preprocessor.transform_dataset(list(data)[:64])
+# 3. Build the complete model and load weights when requested.
+model = AutoProteinModel.from_config(config, checkpoint="drugban.pt")
 
-# 3. Build the complete model and create one named batch mapping.
-model = AutoProteinModel("DTI/DrugBAN", pretrain=False)
-batch = model.collator(**processed)
+# 4. Pass loader outputs directly into DrugBAN's embedders.
+embeddings = model.embed(**inputs)
 
-# 4. Embed both modalities.
-embeddings = model.embed(**batch)
-
-# 5. Predict interactions.
+# 5. Pass named embeddings into the BAN predictor.
 prediction = model.predictor(**embeddings)
 
 # 6. Evaluate or expose attention from the prediction mapping.
@@ -77,8 +78,15 @@ returns flat keys such as `protein_embedding`, `protein_mask`,
 in its Python signature. Replacing the head or inserting a user-defined stage
 only requires accepting and returning the desired named fields.
 
-The shared preprocessing produces canonical 74-feature RDKit atoms. DrugBAN's
-collator adds the model-specific virtual-node bit before dense normalized graph convolution,
+The high-level loader exposes its composed `.dataset`, `.preprocessor`,
+`.processed`, `.collator`, and underlying `.loader`. Users can still construct
+or replace each low-level component directly for research workflows.
+
+The loader never invokes either model stage. It only guarantees that its output
+mapping satisfies the selected model card's `embed(**inputs)` contract.
+
+The shared preprocessing produces canonical 74-feature RDKit atoms. The independent
+DrugBAN collator adds the model-specific virtual-node bit before dense normalized graph convolution,
 DrugBAN-compatible residue encoding and CNN layers, bilinear attention, and the
 MLP classifier.
 

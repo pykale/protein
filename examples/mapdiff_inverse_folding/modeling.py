@@ -10,13 +10,8 @@ import torch
 from torch import nn
 
 from kaleprotein.auto import AutoProteinEmbedder, AutoProteinPredictor
-from .collators import CollatorDiff, CollatorIPAPretrain
-from .data import (
-    DiffusionBatch,
-    GraphBatch,
-    coerce_protein_graph,
-)
-from kaleprotein.core.weights import load_checkpoint_state_dict, resolve_pretrained_weight
+from .data import DiffusionBatch
+from kaleprotein.core.weights import load_checkpoint_state_dict
 
 from .configuration import MapDiffConfig
 from .diffusion import MapDiffDiffusion
@@ -73,34 +68,9 @@ def _upstream_kwargs(config):
     }
 
 
-class MapDiffCollator:
-    """Expose MapDiff's paired graph views through a named batch mapping."""
-
-    def __init__(self):
-        self._collator = CollatorDiff()
-
-    def __call__(self, samples):
-        graphs = []
-        for sample in samples:
-            structure = sample.get("structure", sample) if isinstance(sample, dict) else sample
-            graph = structure.get("graph", structure) if isinstance(structure, dict) else structure
-            graphs.append(coerce_protein_graph(graph))
-        return {"batch": self._collator(graphs)}
-
-
-class MapDiffIPACollator:
-    """Expose IPA pretraining inputs through the same mapping contract."""
-
-    def __init__(self, **kwargs):
-        self._collator = CollatorIPAPretrain(**kwargs)
-
-    def __call__(self, samples):
-        return {"ipa_batch": self._collator(samples)}
-
-
 @AutoProteinPredictor.register("inverse_folding/mapdiff_generator")
 class MapDiffGenerator(nn.Module):
-    """MapDiff denoising generator; checkpoint loading remains model-owned."""
+    """MapDiff denoising generator."""
 
     def __init__(self, config, architecture=None, **kwargs):
         super().__init__()
@@ -135,13 +105,11 @@ class MapDiffGenerator(nn.Module):
             hasattr(value, "graph") and hasattr(value, "ipa")
         ):
             return value
-        if isinstance(value, GraphBatch):
-            raise ValueError("MapDiff needs the paired IPA view; collate records with CollatorDiff.")
-        if isinstance(value, dict) and isinstance(value.get("batch"), DiffusionBatch):
-            return value["batch"]
-        structure = value.get("structure", value) if isinstance(value, dict) else value
-        graph = structure["graph"] if isinstance(structure, dict) and "graph" in structure else coerce_protein_graph(structure)
-        return CollatorDiff()([graph])
+        if isinstance(value, dict) and "batch" in value:
+            return MapDiffGenerator.as_batch(value["batch"])
+        raise TypeError(
+            "MapDiff expects an already-collated DiffusionBatch tensor input."
+        )
 
     def embed(self, value=None, *, batch=None, **kwargs):
         batch = self.as_batch(value, batch=batch)
@@ -176,6 +144,8 @@ class MapDiffGenerator(nn.Module):
         sample_ids=None,
         **kwargs,
     ):
+        if "ipa_batch" in kwargs:
+            return self.prior_pretrain_loss(kwargs["ipa_batch"])
         if isinstance(conditioning, dict) and batch is None:
             payload = conditioning
             return self(**payload)
@@ -247,31 +217,20 @@ class MapDiffConditionEmbedder(nn.Module):
 
 
 class MapDiffModel(nn.Module):
-    """Full MapDiff composition root and sole checkpoint owner."""
+    """Full MapDiff composition root and checkpoint state adapter."""
 
     config_class = MapDiffConfig
 
-    def __init__(self, config, pretrain=False):
+    def __init__(self, config, **kwargs):
         super().__init__()
         self.config = config
-        self.pretrain = pretrain
-        model_architecture = config.get("model", {}).get("architecture", "kale-mapdiff-v1")
-        pretrained_architecture = config.get("pretrained", {}).get(
-            "architecture", model_architecture
-        )
-        architecture = pretrained_architecture if pretrain else model_architecture
-        self.collator = MapDiffCollator()
-        self.ipa_collator = MapDiffIPACollator()
+        architecture = config.get("model", {}).get("architecture", "kale-mapdiff-v1")
         self.predictor = AutoProteinPredictor.from_config(
             config.get_predictor(), config=config, architecture=architecture
         )
         self.embedder = AutoProteinEmbedder.from_config(
             config.get_embedders()["structure"], config=config, predictor=self.predictor
         )
-        self.weight_path = None
-        if pretrain:
-            self.weight_path = resolve_pretrained_weight(config)
-            self.load_compatible_checkpoint(self.weight_path)
 
     @property
     def architecture(self):
@@ -283,7 +242,9 @@ class MapDiffModel(nn.Module):
 
         return self.predictor.network
 
-    def embed(self, value=None, **batch):
+    def embed(self, value=None, ipa_batch=None, **batch):
+        if ipa_batch is not None:
+            return {"ipa_batch": ipa_batch}
         return self.embedder.embed(value, **batch)
 
     def forward(self, value=None, **inputs):
@@ -314,7 +275,14 @@ class MapDiffModel(nn.Module):
     def prior_pretrain_loss(self, ipa_batch):
         return self.predictor.prior_pretrain_loss(ipa_batch)
 
-    def evaluate(self, sequences, reference_sequences, logits=None, **generation):
+    def evaluate(
+        self,
+        sequences,
+        reference_sequences,
+        logits=None,
+        perplexity_reference_sequences=None,
+        **generation,
+    ):
         from kaleprotein.core.evaluation.tasks.inverse_folding.metrics import (
             Diversity,
             Perplexity,
@@ -327,7 +295,10 @@ class MapDiffModel(nn.Module):
             "diversity": Diversity()(output),
         }
         if logits is not None:
-            metrics["perplexity"] = Perplexity()(output, reference_sequences)
+            metrics["perplexity"] = Perplexity()(
+                output,
+                perplexity_reference_sequences or reference_sequences,
+            )
         return metrics
 
     def save_checkpoint(self, path):
@@ -338,7 +309,7 @@ class MapDiffModel(nn.Module):
         )
         return path
 
-    def load_compatible_checkpoint(self, path):
+    def load_checkpoint(self, path):
         path = Path(path)
         state = load_checkpoint_state_dict(path, map_location="cpu")
         return self._load_compatible_state_dict(state, path)
@@ -403,8 +374,6 @@ def _attach_generation_metadata(output, reference_sequences, sample_ids):
 
 __all__ = [
     "MapDiffConditionEmbedder",
-    "MapDiffCollator",
-    "MapDiffIPACollator",
     "MapDiffGenerator",
     "MapDiffModel",
 ]

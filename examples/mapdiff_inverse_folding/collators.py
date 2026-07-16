@@ -112,4 +112,40 @@ class CollatorDiff:
         return DiffusionBatch(batch_graphs(graphs), _padded_batch(graphs))
 
 
-__all__ = ["CollatorDiff", "CollatorIPAPretrain", "batch_graphs"]
+class MapDiffCollator:
+    """Expose paired diffusion graph views through a named batch mapping."""
+
+    def __init__(self, config=None, **kwargs):
+        self._collator = CollatorDiff()
+
+    def __call__(self, samples):
+        graphs = []
+        for sample in samples:
+            structure = sample.get("structure", sample) if isinstance(sample, dict) else sample
+            graph = structure.get("graph", structure) if isinstance(structure, dict) else structure
+            graphs.append(coerce_protein_graph(graph))
+        return {"batch": self._collator(graphs)}
+
+
+class MapDiffIPACollator:
+    """Expose IPA pretraining inputs through a named batch mapping."""
+
+    def __init__(self, config=None, **kwargs):
+        self._collator = CollatorIPAPretrain(**kwargs)
+
+    def __call__(self, samples):
+        graphs = []
+        for sample in samples:
+            structure = sample.get("structure", sample) if isinstance(sample, dict) else sample
+            graph = structure.get("graph", structure) if isinstance(structure, dict) else structure
+            graphs.append(coerce_protein_graph(graph))
+        return {"ipa_batch": self._collator(graphs)}
+
+
+__all__ = [
+    "CollatorDiff",
+    "CollatorIPAPretrain",
+    "MapDiffCollator",
+    "MapDiffIPACollator",
+    "batch_graphs",
+]

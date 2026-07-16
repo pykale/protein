@@ -1,5 +1,6 @@
 import importlib
 import math
+from pathlib import Path
 
 import pytest
 import torch
@@ -31,8 +32,10 @@ def _coords(length=4, shift=0.0):
 
 
 def _tiny_config(tmp_path=None, filename="weights.pt"):
+    example_dir = Path(__file__).resolve().parents[1] / "examples" / "mapdiff_inverse_folding"
     config = {
         "model_id": "InverseFolding/MapDiffTiny",
+        "_config_dir": str(example_dir),
         "task": "inverse_folding",
         "objective": "generative",
         "auto_map": {"AutoProteinModel": "modeling.MapDiffModel"},
@@ -64,8 +67,7 @@ def _tiny_config(tmp_path=None, filename="weights.pt"):
     if tmp_path is not None:
         config.update(
             {
-                "_config_dir": str(tmp_path),
-                "pretrained": {"local_dir": ".", "filename": filename},
+                "pretrained": {"local_dir": str(tmp_path), "filename": filename},
             }
         )
     return AutoProteinConfig.from_dict(config)
@@ -80,9 +82,8 @@ def _graphs():
 
 def _tiny_upstream_config(tmp_path, filename="upstream.pt"):
     config = _tiny_config().to_dict()
-    config["_config_dir"] = str(tmp_path)
     config["pretrained"] = {
-        "local_dir": ".",
+        "local_dir": str(tmp_path),
         "filename": filename,
         "url": "https://example.test/mapdiff_weight.pt",
         "format": "upstream-mapdiff-v1",
@@ -149,7 +150,7 @@ def test_both_mapdiff_collators_are_functional():
 
 def test_tiny_optimizer_step_and_iterative_sampling():
     torch.manual_seed(11)
-    model = MapDiffModel(_tiny_config(), pretrain=False)
+    model = MapDiffModel(_tiny_config())
     assert len(model.state_dict()) == len(model.network.state_dict())
     assert all(key.startswith("predictor.network.") for key in model.state_dict())
     batch = CollatorDiff()(_graphs())
@@ -173,7 +174,7 @@ def test_tiny_optimizer_step_and_iterative_sampling():
 
 
 def test_generator_consumes_precomputed_structure_condition(monkeypatch):
-    model = MapDiffModel(_tiny_config(), pretrain=False)
+    model = MapDiffModel(_tiny_config())
     batch = CollatorDiff()([_graphs()[0]])
     encoded = model.embed(batch=batch)
     original_forward = model.network.forward
@@ -202,9 +203,9 @@ def test_inverse_folding_metrics_use_sequences_and_logits():
 
 def test_compatible_checkpoint_loads_and_incompatible_one_fails(tmp_path):
     config = _tiny_config(tmp_path)
-    source = MapDiffModel(config, pretrain=False)
+    source = MapDiffModel(config)
     torch.save({"format": "kale-mapdiff-v1", "state_dict": source.state_dict()}, tmp_path / "weights.pt")
-    loaded = MapDiffModel(config, pretrain=True)
+    loaded = AutoProteinModel(config, pretrain=True)
     assert loaded.weight_path == tmp_path / "weights.pt"
     key = next(iter(source.state_dict()))
     assert torch.equal(source.state_dict()[key], loaded.state_dict()[key])
@@ -212,7 +213,7 @@ def test_compatible_checkpoint_loads_and_incompatible_one_fails(tmp_path):
     torch.save({"state_dict": {"upstream.egnn.weight": torch.ones(2, 2)}}, tmp_path / "bad.pt")
     bad_config = _tiny_config(tmp_path, "bad.pt")
     with pytest.raises(RuntimeError, match="checkpoint compatibility error.*exact state-key"):
-        MapDiffModel(bad_config, pretrain=True)
+        AutoProteinModel(bad_config, pretrain=True)
 
 
 def test_upstream_container_selects_release_architecture_and_strictly_loads(tmp_path):
@@ -227,7 +228,7 @@ def test_upstream_container_selects_release_architecture_and_strictly_loads(tmp_
         tmp_path / "upstream.pt",
     )
 
-    loaded = MapDiffModel(_tiny_upstream_config(tmp_path), pretrain=True)
+    loaded = AutoProteinModel(_tiny_upstream_config(tmp_path), pretrain=True)
     assert loaded.architecture == "upstream-mapdiff-v1"
     assert len(loaded.network.state_dict()) == len(state)
     assert torch.equal(loaded.network.state_dict()[representative], state[representative])
@@ -266,7 +267,7 @@ def test_all_workflow_mains_run_with_fake_graph_and_tiny_model(monkeypatch, tmp_
     }
 
     def tiny_model(*args, **kwargs):
-        return MapDiffModel(_tiny_config(), pretrain=False)
+        return MapDiffModel(_tiny_config())
 
     for module in modules.values():
         monkeypatch.setattr(module, "AutoProteinModel", tiny_model)

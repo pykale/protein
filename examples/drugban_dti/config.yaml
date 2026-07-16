@@ -5,6 +5,7 @@ task: dti
 objective: discriminative
 auto_map:
   AutoProteinConfig: configuration.DrugBANConfig
+  AutoProteinCollator: collators.DrugBANCollator
   AutoProteinModel: modeling.DrugBANModel
 pretrained:
   local_dir: weights

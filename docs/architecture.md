@@ -32,14 +32,19 @@ flowchart TB
         direction LR
         DATA["AutoProteinData"]
         PREP["AutoProteinPreprocessor"]
+        COLLATE["AutoProteinCollator"]
+        LOADER["AutoProteinDataLoader"]
         MODEL["AutoProteinModel"]
         EMBED["AutoProteinEmbedder"]
         PREDICT["AutoProteinPredictor"]
         EVAL["AutoProteinEvaluator"]
         INTERP["AutoProteinInterpreter"]
-        DATA --> PREP --> MODEL --> EVAL --> INTERP
-        MODEL --> EMBED
-        MODEL --> PREDICT
+        DATA --> LOADER
+        PREP --> LOADER
+        COLLATE --> LOADER
+        LOADER --> EMBED --> PREDICT --> EVAL --> INTERP
+        MODEL -.->|"contains"| EMBED
+        MODEL -.->|"contains"| PREDICT
       end
     end
 
@@ -57,14 +62,24 @@ flowchart TB
 
 ## User API
 
-Users normally construct one complete model:
+Users normally construct one data composition and one complete model from the
+same model card:
 
 ```python
-model = AutoProteinModel("DTI/DrugBAN", pretrain=True)
+config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
+loader = AutoProteinDataLoader(
+    "BindingDB/DTI",
+    config=config,
+    root="path/to/datasets",
+    batch_size=64,
+)
+model = AutoProteinModel.from_config(config, pretrain=True)
 ```
 
 `AutoProteinModel` reads the model card and imports its `modeling.py`. It does
-not contain a DrugBAN or MapDiff condition.
+not contain a DrugBAN or MapDiff condition. `AutoProteinDataLoader` uses the
+data id only for normalized records and the config only for preprocessing and
+collation. It never creates or retains the model.
 
 ## Model Composition
 
@@ -95,12 +110,33 @@ Public pipeline boundaries exchange ordinary dictionaries. Each next stage
 expands that dictionary into named arguments:
 
 ```python
-processed = preprocessor.transform_dataset(records)
-batch = model.collator(**processed)
-embeddings = model.embed(**batch)
+inputs = next(iter(loader))
+embeddings = model.embed(**inputs)
 prediction = model.predictor(**embeddings)
 metrics = model.evaluate(**prediction)
 ```
+
+For generative models, the second call becomes
+`model.predictor.generate(**embeddings)`. The loader-to-embedder and
+embedder-to-predictor boundaries both remain explicit and replaceable.
+`AutoProteinModel` groups and loads those model components; it does not collapse
+the normal pipeline into `model(**inputs)`.
+
+The high-level loader is equivalent to the following replaceable low-level
+composition:
+
+```python
+dataset = AutoProteinData("BindingDB/DTI", root="path/to/datasets")
+preprocessor = AutoProteinPreprocessor.from_config(config)
+processed = preprocessor.process(dataset)
+collator = AutoProteinCollator.from_config(config)
+batch = collator(**processed)
+```
+
+`Dataset/Task` identifies reusable normalized data. The separate model config
+is required because models sharing one task can need different featurization,
+padding, and collation. The loader validates that the data task and model task
+match.
 
 Auto requires mappings at these boundaries, but it does not prescribe one
 universal tensor schema. The concrete model card owns meaningful names. For
@@ -110,6 +146,11 @@ generators declare the fields they consume and accept unrelated metadata with
 `**kwargs` when it should flow to a later stage. This lets users replace or
 insert components using normal Python APIs instead of adapting positional
 tuples or framework-specific workflow containers.
+
+Concrete model classes never create datasets, preprocessors, collators, or
+data loaders. They receive already-collated tensor mappings. The Auto data
+composition owns batching; executable scripts own iteration, device transfer,
+optimization, and other workflow orchestration.
 
 ## Runtime Pipelines
 
@@ -139,7 +180,8 @@ flowchart LR
 
 ## Ownership Rules
 
-- `auto/` owns generic dispatch only.
+- `auto/` owns generic dispatch and composition only. `AutoProteinDataLoader`
+  composes registered data components without importing a concrete model.
 - `core/data/utils/` owns fundamental FASTA, tabular, PDB, mmCIF, and file
   parsing functions.
 - `core/data/<dataset>.py` owns built-in dataset adapters such as BindingDB,
@@ -154,9 +196,10 @@ flowchart LR
 - `core/evaluation/tasks/` owns task metrics and interpretation methods.
 - `examples/<model>/` owns concrete model composition, model-specific layers,
   collators, feature graphs, forward/generate behavior, scripts, and checkpoint
-  adapters.
-- The complete model is the sole owner of full-model weight resolution and
-  loading. Nested components never download the same checkpoint again.
+  state adapters. Collators remain separate from model classes.
+- `AutoProteinModel` owns full-model checkpoint resolution, optional download,
+  and the single call into the concrete model's `load_checkpoint()` adapter.
+  Nested components never resolve or download that checkpoint again.
 
 Adding a new model normally adds one example directory and model card. Core is
 changed only when the model introduces a genuinely reusable component; Auto is

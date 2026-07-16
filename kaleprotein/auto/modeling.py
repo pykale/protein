@@ -6,6 +6,7 @@ import importlib
 
 from kaleprotein.core.config import AutoProteinConfig, ComponentSpec
 from kaleprotein.core.registry import EMBEDDER_REGISTRY, PREDICTOR_REGISTRY
+from kaleprotein.core.weights import resolve_pretrained_weight
 
 
 def _coerce_model_config(model_id_or_config):
@@ -40,16 +41,34 @@ def _import_shared_component_namespace(registry, component_id):
 class AutoProteinModel:
     """Load a complete model implementation declared by its model card."""
 
-    def __new__(cls, model_id=None, *, pretrain=False, **kwargs):
+    def __new__(cls, model_id=None, *, pretrain=False, checkpoint=None, **kwargs):
         if cls is not AutoProteinModel:
             return super().__new__(cls)
-        return cls.from_config(model_id, pretrain=pretrain, **kwargs)
+        return cls.from_config(
+            model_id,
+            pretrain=pretrain,
+            checkpoint=checkpoint,
+            **kwargs,
+        )
 
     @classmethod
-    def from_config(cls, config, *, pretrain=False, **kwargs):
+    def from_config(cls, config, *, pretrain=False, checkpoint=None, **kwargs):
         config = _coerce_model_config(config)
+        if pretrain and checkpoint is not None:
+            raise ValueError("Pass either pretrain=True or checkpoint=..., not both.")
+        weight_path = resolve_pretrained_weight(config) if pretrain else checkpoint
         implementation = config.auto_class("AutoProteinModel")
-        return implementation(config=config, pretrain=pretrain, **kwargs)
+        model = implementation(config=config, **kwargs)
+        if weight_path is not None:
+            load_checkpoint = getattr(model, "load_checkpoint", None)
+            if not callable(load_checkpoint):
+                raise TypeError(
+                    f"{type(model).__name__} must define load_checkpoint() to load weights "
+                    "through AutoProteinModel."
+                )
+            load_checkpoint(weight_path)
+            model.weight_path = weight_path
+        return model
 
 
 class AutoProteinEmbedder:
