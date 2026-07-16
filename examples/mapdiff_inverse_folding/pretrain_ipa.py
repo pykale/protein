@@ -45,7 +45,7 @@ def main(argv=None):
     )
     # 2. Build the complete model and select its IPA prior parameters.
     model = AutoProteinModel("InverseFolding/MapDiff").to(args.device)
-    optimizer = torch.optim.AdamW(model.predictor.network.prior.parameters(), lr=args.learning_rate)
+    optimizer = torch.optim.AdamW(model.network.prior.parameters(), lr=args.learning_rate)
     model.train()
 
     # 3. Optimize the masking-prior objective.
@@ -54,7 +54,7 @@ def main(argv=None):
             optimizer.zero_grad(set_to_none=True)
             inputs = move_to_device(inputs, args.device)
             embeddings = model.embed(**inputs)
-            output = model.predictor(**embeddings)
+            output = model.predict(**embeddings)
             output["loss"].backward()
             optimizer.step()
     # 4. Save a complete checkpoint that AutoProteinModel can restore.

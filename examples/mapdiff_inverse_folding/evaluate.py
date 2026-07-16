@@ -64,7 +64,7 @@ def main(argv=None):
         for inputs in loader:
             inputs = move_to_device(inputs, args.device)
             embeddings = model.embed(**inputs)
-            generation = model.predictor.generate(
+            generation = model.generate(
                 **embeddings,
                 steps=args.steps,
                 method=args.method,

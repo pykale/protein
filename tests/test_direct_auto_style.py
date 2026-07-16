@@ -29,9 +29,9 @@ def test_model_ids_are_card_driven_not_auto_hardcoded():
 def test_example_evaluations_expose_the_named_auto_pipeline():
     root = Path(__file__).resolve().parents[1]
     scripts = {
-        "examples/drugban_dti/evaluate.py": "prediction = model.predictor(**embeddings)",
+        "examples/drugban_dti/evaluate.py": "prediction = model.predict(**embeddings)",
         "examples/mapdiff_inverse_folding/evaluate.py": (
-            "generation = model.predictor.generate("
+            "generation = model.generate("
         ),
     }
 
@@ -58,21 +58,21 @@ def test_example_evaluations_expose_the_named_auto_pipeline():
 def test_all_workflows_keep_embedder_and_predictor_stages_explicit():
     root = Path(__file__).resolve().parents[1]
     scripts = {
-        "examples/drugban_dti/train.py": "model.predictor(**embeddings)",
-        "examples/drugban_dti/evaluate.py": "model.predictor(**embeddings)",
-        "examples/drugban_dti/predict.py": "model.predictor(**embeddings)",
-        "examples/drugban_dti/interpret.py": "model.predictor(**embeddings)",
+        "examples/drugban_dti/train.py": "model.predict(**embeddings)",
+        "examples/drugban_dti/evaluate.py": "model.predict(**embeddings)",
+        "examples/drugban_dti/predict.py": "model.predict(**embeddings)",
+        "examples/drugban_dti/interpret.py": "model.predict(**embeddings)",
         "examples/mapdiff_inverse_folding/pretrain_ipa.py": (
-            "model.predictor(**embeddings)"
+            "model.predict(**embeddings)"
         ),
         "examples/mapdiff_inverse_folding/train_diffusion.py": (
-            "model.predictor(**embeddings)"
+            "model.predict(**embeddings)"
         ),
         "examples/mapdiff_inverse_folding/evaluate.py": (
-            "model.predictor.generate("
+            "model.generate("
         ),
         "examples/mapdiff_inverse_folding/generate.py": (
-            "model.predictor.generate("
+            "model.generate("
         ),
     }
 
@@ -83,6 +83,7 @@ def test_all_workflows_keep_embedder_and_predictor_stages_explicit():
         assert "model.embed(**inputs)" in source
         assert predictor_stage in source
         assert "model(**inputs)" not in source
+        assert "model.predictor" not in source
 
 
 def test_model_cards_do_not_require_pyyaml(monkeypatch):
@@ -119,7 +120,7 @@ def test_drugban_direct_pipeline_style(fake_rdkit_graph, tmp_path):
     batch = next(iter(loader))
     model = AutoProteinModel.from_config(config)
     embeddings = model.embed(**batch)
-    prediction = model.predictor(**embeddings)
+    prediction = model.predict(**embeddings)
 
     def custom_head(protein_embedding, molecule_embedding, labels=None, **metadata):
         return {
@@ -215,8 +216,8 @@ def test_mapdiff_direct_generative_pipeline_style(tmp_path):
     batch = next(iter(loader))
     model = AutoProteinModel.from_config(config)
     conditioning = model.embed(**batch)
-    generated = model.predictor.generate(**conditioning, steps=1)
-    training_output = model.predictor(**conditioning)
+    generated = model.generate(**conditioning, steps=1)
+    training_output = model.predict(**conditioning)
     metrics = model.evaluate(**generated)
     auto_metrics = AutoProteinEvaluator.from_config(model.config).evaluate(**generated)
     interpretation = AutoProteinInterpreter.from_config(model.config).explain(**generated)

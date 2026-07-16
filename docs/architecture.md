@@ -112,12 +112,12 @@ expands that dictionary into named arguments:
 ```python
 inputs = next(iter(loader))
 embeddings = model.embed(**inputs)
-prediction = model.predictor(**embeddings)
+prediction = model.predict(**embeddings)
 metrics = model.evaluate(**prediction)
 ```
 
 For generative models, the second call becomes
-`model.predictor.generate(**embeddings)`. The loader-to-embedder and
+`model.generate(**embeddings)`. The loader-to-embedder and
 embedder-to-predictor boundaries both remain explicit and replaceable.
 `AutoProteinModel` groups and loads those model components; it does not collapse
 the normal pipeline into `model(**inputs)`.

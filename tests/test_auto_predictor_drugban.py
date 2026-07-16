@@ -15,8 +15,8 @@ def test_drugban_complete_model_predicts(fake_rdkit_graph):
     batch = collator(**processed)
     model = AutoProteinModel("DTI/DrugBAN", pretrain=False)
     embeddings = model.embed(**batch)
-    output = model.predictor(**embeddings)
+    output = model.predict(**embeddings)
 
     assert "logits" in output and "probabilities" in output
     assert model.protein_embedder is not model.molecule_embedder
-    assert model.predictor is not model.protein_embedder
+    assert callable(model.predict)

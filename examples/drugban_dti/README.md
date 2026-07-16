@@ -63,8 +63,8 @@ model = AutoProteinModel.from_config(config, checkpoint="drugban.pt")
 # 4. Pass loader outputs directly into DrugBAN's embedders.
 embeddings = model.embed(**inputs)
 
-# 5. Pass named embeddings into the BAN predictor.
-prediction = model.predictor(**embeddings)
+# 5. Predict interactions from the named embeddings.
+prediction = model.predict(**embeddings)
 
 # 6. Evaluate or expose attention from the prediction mapping.
 metrics = model.evaluate(**prediction)

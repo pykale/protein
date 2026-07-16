@@ -168,7 +168,7 @@ def test_optimizer_step_changes_parameter(tiny_config):
     before = predictor.predictor.decoder.fc4.weight.detach().clone()
 
     embeddings = predictor.embed(**batch)
-    output = predictor.predictor(**embeddings)
+    output = predictor.predict(**embeddings)
     loss = torch.nn.functional.binary_cross_entropy_with_logits(output["logits"], batch["label"])
     loss.backward()
     optimizer.step()
@@ -184,7 +184,7 @@ def test_component_embeddings_equal_full_batch_and_raw_preprocessed(tiny_config,
 
     full = predictor(**batch)
     embeddings = predictor.embed_components(**batch)
-    component = predictor.predictor(**embeddings)
+    component = predictor.predict(**embeddings)
     assert torch.allclose(full["logits"], component["logits"], atol=1e-6)
 
     raw = [
@@ -194,7 +194,7 @@ def test_component_embeddings_equal_full_batch_and_raw_preprocessed(tiny_config,
     processed = AutoProteinPreprocessor.from_config(tiny_config).process(raw)
     raw_batch = collator(**processed)
     raw_embeddings = predictor.embed(**raw_batch)
-    raw_output = predictor.predictor(**raw_embeddings)
+    raw_output = predictor.predict(**raw_embeddings)
     assert raw_output["probabilities"].shape == (2,)
 
 

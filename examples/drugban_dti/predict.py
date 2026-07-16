@@ -89,7 +89,7 @@ def main(argv=None):
         for inputs in loader:
             inputs = move_to_device(inputs, device)
             embeddings = model.embed(**inputs)
-            prediction = model.predictor(**embeddings)
+            prediction = model.predict(**embeddings)
             for index, probability in enumerate(
                 prediction["probabilities"].detach().cpu()
             ):

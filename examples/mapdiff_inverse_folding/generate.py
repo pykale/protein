@@ -61,7 +61,7 @@ def main(argv=None):
             inputs = move_to_device(inputs, args.device)
             embeddings = model.embed(**inputs)
             generated_batches.append(
-                model.predictor.generate(
+                model.generate(
                     **embeddings,
                     steps=args.steps,
                     method=args.method,

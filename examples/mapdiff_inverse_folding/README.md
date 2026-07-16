@@ -69,7 +69,7 @@ model = AutoProteinModel.from_config(config, pretrain=True)
 embeddings = model.embed(**inputs)
 
 # 5. Generate from the named embedding mapping.
-generation = model.predictor.generate(
+generation = model.generate(
     **embeddings,
     steps=100,
     method="ddim",

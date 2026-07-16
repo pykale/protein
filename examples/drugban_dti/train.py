@@ -93,7 +93,7 @@ def main(argv=None):
             inputs = move_to_device(inputs, device)
             optimizer.zero_grad()
             embeddings = model.embed(**inputs)
-            prediction = model.predictor(**embeddings)
+            prediction = model.predict(**embeddings)
             labels = prediction["labels"].float().view_as(prediction["logits"])
             loss = F.binary_cross_entropy_with_logits(prediction["logits"], labels)
             loss.backward()
@@ -118,7 +118,7 @@ def main(argv=None):
             for inputs in validation_loader:
                 inputs = move_to_device(inputs, device)
                 embeddings = model.embed(**inputs)
-                prediction = model.predictor(**embeddings)
+                prediction = model.predict(**embeddings)
                 probabilities.append(prediction["probabilities"].detach().cpu())
                 labels.append(prediction["labels"].detach().cpu())
         result["validation"] = model.evaluate(
