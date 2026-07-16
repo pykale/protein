@@ -12,7 +12,7 @@ def test_mapdiff_complete_model_generates():
     model = AutoProteinModel("InverseFolding/MapDiff", pretrain=False)
     batch_fields = {"batch": batch}
     conditioning = model.embed(**batch_fields)
-    output = model.predictor.generate(**conditioning, steps=1)
+    output = model.generate(**conditioning, steps=1)
 
     assert "structure_embedding" in conditioning
     assert output["sequences"]

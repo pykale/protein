@@ -120,8 +120,8 @@ model = AutoProteinModel.from_config(config, checkpoint="drugban.pt")
 # 4. Pass loader outputs directly into the registered embedders.
 embeddings = model.embed(**inputs)
 
-# 5. Pass named embeddings into the registered predictor.
-prediction = model.predictor(**embeddings)
+# 5. Predict from the named embeddings.
+prediction = model.predict(**embeddings)
 
 # 6. Evaluate or interpret when needed.
 metrics = model.evaluate(**prediction)
@@ -213,7 +213,7 @@ model = AutoProteinModel.from_config(config, pretrain=True)
 embeddings = model.embed(**inputs)
 
 # 5. Generate from the named embedding mapping.
-generation = model.predictor.generate(
+generation = model.generate(
     **embeddings,
     steps=100,
     method="ddim",

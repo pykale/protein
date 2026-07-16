@@ -72,7 +72,7 @@ def main(argv=None):
         for inputs in loader:
             inputs = move_to_device(inputs, device)
             embeddings = model.embed(**inputs)
-            prediction = model.predictor(**embeddings)
+            prediction = model.predict(**embeddings)
             attention = model.extract_attention(**prediction)
             samples.extend(interpreter.explain(**attention)["samples"])
     result = {"samples": samples}

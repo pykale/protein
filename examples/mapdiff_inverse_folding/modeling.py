@@ -247,12 +247,15 @@ class MapDiffModel(nn.Module):
             return {"ipa_batch": ipa_batch}
         return self.embedder.embed(value, **batch)
 
+    def predict(self, **embeddings):
+        return self.predictor(**embeddings)
+
     def forward(self, value=None, **inputs):
         if _is_conditioning(value):
-            return self.predictor(**value)
+            return self.predict(**value)
         if _is_conditioning(inputs):
-            return self.predictor(**inputs)
-        return self.predictor(**self.embed(value, **inputs))
+            return self.predict(**inputs)
+        return self.predict(**self.embed(value, **inputs))
 
     def generate(self, value=None, sampling_config=None, **kwargs):
         if _is_conditioning(value):

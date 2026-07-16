@@ -54,7 +54,7 @@ def main(argv=None):
             optimizer.zero_grad(set_to_none=True)
             inputs = move_to_device(inputs, args.device)
             embeddings = model.embed(**inputs)
-            output = model.predictor(**embeddings)
+            output = model.predict(**embeddings)
             output["loss"].backward()
             optimizer.step()
     # 4. Save the full composed model.

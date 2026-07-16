@@ -28,7 +28,7 @@ def test_loader_composes_dataset_preprocessor_and_collator(fake_rdkit_graph, tmp
     batch = next(iter(loader))
     model = AutoProteinModel.from_config(loader.config)
     embeddings = model.embed(**batch)
-    prediction = model.predictor(**embeddings)
+    prediction = model.predict(**embeddings)
 
     assert loader.config["model_id"] == "DTI/DrugBAN"
     assert len(loader.dataset) == 2

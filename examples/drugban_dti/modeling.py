@@ -55,14 +55,17 @@ class DrugBANModel(nn.Module):
 
     embed_components = embed
 
+    def predict(self, **embeddings):
+        return self.predictor(**embeddings)
+
     def forward(self, protein_embedding=None, molecule_embedding=None, **inputs):
         if protein_embedding is not None and molecule_embedding is not None:
-            return self.predictor(
+            return self.predict(
                 protein_embedding=protein_embedding,
                 molecule_embedding=molecule_embedding,
                 **inputs,
             )
-        return self.predictor(**self.embed(**inputs))
+        return self.predict(**self.embed(**inputs))
 
     def evaluate(self, *, probabilities, labels, threshold=0.5, **prediction):
         from kaleprotein.core.evaluation.tasks.dti.metrics import compute_metrics

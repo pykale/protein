@@ -133,15 +133,19 @@ def test_new_card_composes_registered_components_without_auto_changes(tmp_path):
         "        self.loaded_checkpoint = None\n"
         "    def load_checkpoint(self, path):\n"
         "        self.loaded_checkpoint = path\n"
+        "    def embed(self, value):\n"
+        "        return self.embedder.embed(value)\n"
+        "    def predict(self, **embeddings):\n"
+        "        return self.predictor(**embeddings)\n"
         "    def __call__(self, value):\n"
-        "        embeddings = self.embedder.embed(value)\n"
-        "        return self.predictor(**embeddings)\n",
+        "        return self.predict(**self.embed(value))\n",
         encoding="utf-8",
     )
     MODEL_CARD_REGISTRY.register("Architecture/Relative", config_path)
 
     model = AutoProteinModel("Architecture/Relative", checkpoint="relative.ckpt")
 
-    assert model("payload") == {"prediction": "embedded:payload:predicted"}
+    embeddings = model.embed("payload")
+    assert model.predict(**embeddings) == {"prediction": "embedded:payload:predicted"}
     assert model.loaded_checkpoint == "relative.ckpt"
     assert model.weight_path == "relative.ckpt"
