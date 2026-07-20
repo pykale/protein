@@ -12,8 +12,10 @@ from examples.mapdiff_inverse_folding.collators import CollatorDiff, CollatorIPA
 from examples.mapdiff_inverse_folding.data import build_residue_graph
 from kaleprotein.core.data.cath import CATHDataset
 from kaleprotein.core.preprocessing.structure import BackboneCoordinateProcessor
-from kaleprotein.core.evaluation.tasks.inverse_folding.interpreters import DenoisingTrajectoryInterpreter
 from kaleprotein.core.evaluation.tasks.inverse_folding.metrics import Diversity, Perplexity, SequenceRecovery
+from kaleprotein.core.interpretation.tasks.inverse_folding.interpreters import (
+    DenoisingTrajectoryInterpreter,
+)
 
 
 def _coords(length=4, shift=0.0):
@@ -170,7 +172,8 @@ def test_tiny_optimizer_step_and_iterative_sampling():
     assert sampled["trajectory"][-1]["timestep"] == 0
     interpreted = DenoisingTrajectoryInterpreter().explain(sampled)
     assert interpreted["steps"] == 3
-    assert interpreted["final_sequences"] == sampled["trajectory"][-1]["sequences"]
+    assert interpreted["final_sequences"] == sampled["sequences"]
+    assert len(interpreted["trajectories"]) == 2
 
 
 def test_generator_consumes_precomputed_structure_condition(monkeypatch):
@@ -252,7 +255,13 @@ def test_auto_direct_style_and_workflow_modules_are_import_safe():
     output = model.generate(**embeddings, steps=2, num_samples=1)
     assert output["sequences"] and output["trajectory"]
 
-    for module_name in ("pretrain_ipa", "train_diffusion", "evaluate", "generate"):
+    for module_name in (
+        "pretrain_ipa",
+        "train_diffusion",
+        "evaluate",
+        "interpret",
+        "generate",
+    ):
         module = importlib.import_module(f"examples.mapdiff_inverse_folding.{module_name}")
         assert callable(module.main)
         assert callable(module.build_parser)
@@ -263,7 +272,13 @@ def test_all_workflow_mains_run_with_fake_graph_and_tiny_model(monkeypatch, tmp_
     torch.save({"atom_pos": _coords(4), "sequence": "ACDE", "id": "tiny"}, graph_path)
     modules = {
         name: importlib.import_module(f"examples.mapdiff_inverse_folding.{name}")
-        for name in ("pretrain_ipa", "train_diffusion", "evaluate", "generate")
+        for name in (
+            "pretrain_ipa",
+            "train_diffusion",
+            "evaluate",
+            "interpret",
+            "generate",
+        )
     }
 
     def tiny_model(*args, **kwargs):
@@ -284,10 +299,14 @@ def test_all_workflow_mains_run_with_fake_graph_and_tiny_model(monkeypatch, tmp_
     metrics = modules["evaluate"].main(
         [str(graph_path), "--steps", "1", "--num-samples", "1"]
     )
+    interpretation = modules["interpret"].main(
+        [str(graph_path), "--steps", "1", "--num-samples", "1"]
+    )
     generated = modules["generate"].main(
         [str(graph_path), "--steps", "1", "--output", str(generated_path)]
     )
 
     assert ipa_path.is_file() and diffusion_path.is_file() and generated_path.is_file()
     assert {"sequence_recovery", "perplexity", "diversity"} <= metrics.keys()
+    assert interpretation["batches"] and interpretation["final_sequences"]
     assert generated["sequences"] and generated["trajectory"]

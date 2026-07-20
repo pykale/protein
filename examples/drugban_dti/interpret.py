@@ -68,14 +68,18 @@ def main(argv=None):
 
     # 3. Embed, predict, and interpret each prepared batch.
     samples = []
+    attention_maps = []
     with torch.no_grad():
         for inputs in loader:
             inputs = move_to_device(inputs, device)
             embeddings = model.embed(**inputs)
             prediction = model.predict(**embeddings)
-            attention = model.extract_attention(**prediction)
-            samples.extend(interpreter.explain(**attention)["samples"])
-    result = {"samples": samples}
+            interpretation = interpreter.explain(**prediction)
+            samples.extend(interpretation["samples"])
+            attention_maps.extend(interpretation["attention"])
+    if not samples:
+        raise ValueError("Cannot interpret an empty DTI dataset.")
+    result = {"samples": samples, "attention": attention_maps}
     print_json(result)
     return result
 

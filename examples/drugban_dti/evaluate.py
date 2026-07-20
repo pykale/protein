@@ -15,7 +15,6 @@ if str(ROOT) not in sys.path:
 from kaleprotein.auto import (
     AutoProteinConfig,
     AutoProteinDataLoader,
-    AutoProteinInterpreter,
     AutoProteinModel,
 )
 from examples._utils import move_to_device
@@ -63,14 +62,11 @@ def main(argv=None):
         pretrain=args.pretrain,
         checkpoint=args.checkpoint,
     ).to(device)
-    interpreter = AutoProteinInterpreter.from_config(config)
     model.eval()
 
     # 3. Embed, predict, and collect named outputs for every batch.
     probabilities = []
     labels = []
-    interpreted_samples = []
-    interpreted_attention = []
     with torch.no_grad():
         for inputs in loader:
             inputs = move_to_device(inputs, device)
@@ -78,24 +74,16 @@ def main(argv=None):
             prediction = model.predict(**embeddings)
             probabilities.append(prediction["probabilities"].detach().cpu())
             labels.append(prediction["labels"].detach().cpu())
-            attention = model.extract_attention(**prediction)
-            interpreted = interpreter.explain(**attention)
-            interpreted_samples.extend(interpreted["samples"])
-            interpreted_attention.extend(interpreted["attention"])
     if not probabilities:
         raise ValueError("Cannot evaluate an empty DTI dataset.")
 
-    # 4. Evaluate or expose attention from the collected mappings.
+    # 4. Evaluate the collected prediction mapping.
     metrics = model.evaluate(
         probabilities=torch.cat(probabilities),
         labels=torch.cat(labels),
         threshold=args.threshold,
     )
-    interpretation = {
-        "samples": interpreted_samples,
-        "attention": interpreted_attention,
-    }
-    result = {"metrics": metrics, "interpretation": interpretation}
+    result = {"metrics": metrics}
     print_json(result)
     return metrics
 

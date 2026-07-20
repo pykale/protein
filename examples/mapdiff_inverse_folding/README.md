@@ -20,6 +20,7 @@ mapdiff_inverse_folding/
   pretrain_ipa.py
   train_diffusion.py
   evaluate.py
+  interpret.py
   generate.py
   maps/
   data/
@@ -40,7 +41,7 @@ and checkpoint keys are not duplicated. `AutoProteinModel` resolves and loads
 the requested full checkpoint once; `MapDiffModel` only adapts checkpoint state
 to the selected parameter tree.
 
-## Evaluation And Generation Pipeline
+## Evaluation, Generation, And Interpretation Pipeline
 
 ```python
 from kaleprotein.auto import (
@@ -76,8 +77,10 @@ generation = model.generate(
     num_samples=1,
 )
 
-# 6. Evaluate or interpret the generation mapping.
+# 6a. Evaluate the generation mapping.
 metrics = model.evaluate(**generation)
+
+# 6b. Independently interpret its denoising trajectory when needed.
 interpretation = AutoProteinInterpreter.from_config(config).explain(**generation)
 ```
 
@@ -124,6 +127,9 @@ python -m examples.mapdiff_inverse_folding.train_diffusion \
 python -m examples.mapdiff_inverse_folding.evaluate \
   /data/cath/test --pretrained
 
+python -m examples.mapdiff_inverse_folding.interpret \
+  structure.pdb --pretrained --steps 100
+
 python -m examples.mapdiff_inverse_folding.generate \
   structure.pdb --pretrained --steps 100
 ```
@@ -131,6 +137,7 @@ python -m examples.mapdiff_inverse_folding.generate \
 - `pretrain_ipa.py` trains the masking prior and saves a complete model checkpoint.
 - `train_diffusion.py` trains the full lightweight diffusion model.
 - `evaluate.py` reports sequence recovery, perplexity, and diversity.
+- `interpret.py` independently reports changes along the denoising trajectory.
 - `generate.py` preprocesses a structure and samples sequences.
 
 ## Pretrained Weights

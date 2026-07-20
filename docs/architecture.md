@@ -22,7 +22,8 @@ flowchart TB
         CORE_DATA["data/<br/>utils + dataset modules + schemas"]
         CORE_PREP["preprocessing/<br/>reusable transforms"]
         CORE_MODELING["modeling/<br/>modalities + tasks"]
-        CORE_EVAL["evaluation/<br/>task metrics + interpretation"]
+        CORE_EVAL["evaluation/<br/>task metrics"]
+        CORE_INTERP["interpretation/<br/>task explanation methods"]
         REGISTRY["registry/"]
         CONFIG["config/"]
         WEIGHTS["weights/"]
@@ -42,7 +43,9 @@ flowchart TB
         DATA --> LOADER
         PREP --> LOADER
         COLLATE --> LOADER
-        LOADER --> EMBED --> PREDICT --> EVAL --> INTERP
+        LOADER --> EMBED --> PREDICT
+        PREDICT --> EVAL
+        PREDICT --> INTERP
         MODEL -.->|"contains"| EMBED
         MODEL -.->|"contains"| PREDICT
       end
@@ -114,6 +117,7 @@ inputs = next(iter(loader))
 embeddings = model.embed(**inputs)
 prediction = model.predict(**embeddings)
 metrics = model.evaluate(**prediction)
+interpretation = AutoProteinInterpreter.from_config(config).explain(**prediction)
 ```
 
 For generative models, the second call becomes
@@ -121,6 +125,12 @@ For generative models, the second call becomes
 embedder-to-predictor boundaries both remain explicit and replaceable.
 `AutoProteinModel` groups and loads those model components; it does not collapse
 the normal pipeline into `model(**inputs)`.
+
+Evaluation and interpretation are independent consumers of the same output
+mapping. Evaluation aggregates quantitative metrics against labels or reference
+sequences. Interpretation transforms model evidence such as attention maps or
+denoising trajectories into sample-level explanations; neither stage invokes
+the other.
 
 The high-level loader is equivalent to the following replaceable low-level
 composition:
@@ -193,7 +203,8 @@ flowchart LR
 - `core/modeling/modalities/` owns reusable modality encoders and neural layers.
 - `core/modeling/tasks/` owns reusable fusion layers, heads, predictors, and
   generators.
-- `core/evaluation/tasks/` owns task metrics and interpretation methods.
+- `core/evaluation/tasks/` owns quantitative task metrics.
+- `core/interpretation/tasks/` owns reusable task interpretation methods.
 - `examples/<model>/` owns concrete model composition, model-specific layers,
   collators, feature graphs, forward/generate behavior, scripts, and checkpoint
   state adapters. Collators remain separate from model classes.

@@ -10,7 +10,7 @@ model = AutoProteinModel("DTI/DrugBAN", pretrain=True)
 ```
 
 ```text
-load -> preprocess -> collate -> embed -> predict/generate -> evaluate -> interpret
+load -> preprocess -> collate -> embed -> predict/generate -> evaluate or interpret
 ```
 
 ## Boundaries

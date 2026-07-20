@@ -17,7 +17,9 @@ can register their own local or downloaded model cards without changing Auto.
 The examples expose a real pipeline rather than a workflow wrapper:
 
 ```text
-load data -> preprocess -> collate -> embed -> predict/generate -> evaluate -> interpret (optional)
+load data -> preprocess -> collate -> embed -> predict/generate
+                                                   |-> evaluate
+                                                   `-> interpret (optional)
 ```
 
 DrugBAN and MapDiff are self-contained PyTorch refactors. They do not import an
@@ -48,7 +50,9 @@ kaleprotein/
       modalities/               # reusable encoders and neural layers
       tasks/                    # fusion, heads, predictors, generators
     evaluation/
-      tasks/                    # metrics and interpretation
+      tasks/                    # task metrics
+    interpretation/
+      tasks/                    # task interpretation methods
     registry/
     config/
     weights/
@@ -60,8 +64,8 @@ docs/
 ```
 
 `auto/` contains no DrugBAN or MapDiff branch. `core/` contains only reusable
-data, layers, heads, metrics, and infrastructure. Concrete full-model assembly
-and checkpoint compatibility stay in each example. See the
+data, layers, heads, metrics, interpretation methods, and infrastructure.
+Concrete full-model assembly and checkpoint compatibility stay in each example. See the
 [architecture diagram](docs/architecture.md).
 
 ## Installation
@@ -123,10 +127,11 @@ embeddings = model.embed(**inputs)
 # 5. Predict from the named embeddings.
 prediction = model.predict(**embeddings)
 
-# 6. Evaluate or interpret when needed.
+# 6a. Evaluate the prediction mapping.
 metrics = model.evaluate(**prediction)
-attention = model.extract_attention(**prediction)
-interpretation = AutoProteinInterpreter.from_config(config).explain(**attention)
+
+# 6b. Independently interpret the same prediction mapping when needed.
+interpretation = AutoProteinInterpreter.from_config(config).explain(**prediction)
 ```
 
 `AutoProteinDataLoader` exposes `.dataset`, `.preprocessor`, `.processed`,
@@ -233,6 +238,8 @@ python -m examples.mapdiff_inverse_folding.train_diffusion \
   /data/cath/train --checkpoint ipa.pt --output mapdiff.pt
 python -m examples.mapdiff_inverse_folding.evaluate \
   /data/cath/test --pretrained
+python -m examples.mapdiff_inverse_folding.interpret \
+  structure.pdb --pretrained --steps 100
 python -m examples.mapdiff_inverse_folding.generate \
   structure.pdb --pretrained --steps 100
 ```
