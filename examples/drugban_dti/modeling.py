@@ -72,21 +72,6 @@ class DrugBANModel(nn.Module):
 
         return compute_metrics(labels, probabilities, threshold=threshold)
 
-    def extract_attention(self, *, attention, **prediction):
-        output = {"attention": attention, **prediction}
-        return {
-            key: output.get(key)
-            for key in (
-                "attention",
-                "molecule_mask",
-                "protein_mask",
-                "molecule_atom_symbols",
-                "protein_sequences",
-                "molecule_smiles",
-                "sample_ids",
-            )
-        }
-
     def save_checkpoint(self, path, optimizer=None, extra=None):
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)

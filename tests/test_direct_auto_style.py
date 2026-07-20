@@ -50,9 +50,32 @@ def test_example_evaluations_expose_the_named_auto_pipeline():
             "embeddings = model.embed(**inputs)",
             prediction_stage,
             "metrics = model.evaluate(",
-            "AutoProteinInterpreter.from_config(config)",
         ):
             assert stage in source, f"{relative_path} is missing the visible stage: {stage}"
+        assert "AutoProteinInterpreter" not in source
+        assert ".explain(" not in source
+        assert '"interpretation"' not in source
+
+
+def test_example_interpreters_expose_independent_named_pipelines():
+    root = Path(__file__).resolve().parents[1]
+    scripts = {
+        "examples/drugban_dti/interpret.py": "prediction = model.predict(**embeddings)",
+        "examples/mapdiff_inverse_folding/interpret.py": "generation = model.generate(",
+    }
+
+    for relative_path, output_stage in scripts.items():
+        source = (root / relative_path).read_text(encoding="utf-8")
+        for stage in (
+            "loader = AutoProteinDataLoader(",
+            "interpreter = AutoProteinInterpreter.from_config(config)",
+            "for inputs in loader:",
+            "embeddings = model.embed(**inputs)",
+            output_stage,
+            "interpreter.explain(**",
+        ):
+            assert stage in source, f"{relative_path} is missing the visible stage: {stage}"
+        assert "model.evaluate(" not in source
 
 
 def test_all_workflows_keep_embedder_and_predictor_stages_explicit():
@@ -69,6 +92,9 @@ def test_all_workflows_keep_embedder_and_predictor_stages_explicit():
             "model.predict(**embeddings)"
         ),
         "examples/mapdiff_inverse_folding/evaluate.py": (
+            "model.generate("
+        ),
+        "examples/mapdiff_inverse_folding/interpret.py": (
             "model.generate("
         ),
         "examples/mapdiff_inverse_folding/generate.py": (
@@ -130,9 +156,10 @@ def test_drugban_direct_pipeline_style(fake_rdkit_graph, tmp_path):
 
     custom_prediction = custom_head(**embeddings)
     metrics = model.evaluate(**prediction)
-    attention = model.extract_attention(**prediction)
     auto_metrics = AutoProteinEvaluator.from_config(model.config).evaluate(**prediction)
-    interpretation = AutoProteinInterpreter.from_config(model.config).explain(**attention)
+    interpretation = AutoProteinInterpreter.from_config(model.config).explain(
+        **prediction
+    )
 
     assert loader.dataset[1]["label"] == 1
     assert embeddings["protein_embedding"].shape[0] == 2
@@ -141,8 +168,9 @@ def test_drugban_direct_pipeline_style(fake_rdkit_graph, tmp_path):
     assert custom_prediction["scores"].shape == (2,)
     assert set(metrics) == {"auroc", "auprc", "f1", "accuracy", "threshold"}
     assert set(auto_metrics) == {"auroc", "auprc", "f1", "accuracy", "threshold"}
-    assert attention["attention"].shape[0] == 2
+    assert prediction["attention"].shape[0] == 2
     assert len(interpretation["samples"]) == 2
+    assert not hasattr(model, "extract_attention")
     assert not hasattr(model, "collator")
     assert not hasattr(model, "make_dataloader")
     assert set(model.state_dict()) == {

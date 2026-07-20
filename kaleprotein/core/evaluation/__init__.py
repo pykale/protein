@@ -1,1 +1,1 @@
-"""Reusable task metrics and interpretation methods."""
+"""Reusable task evaluation metrics."""

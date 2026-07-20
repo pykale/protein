@@ -1,1 +1,1 @@
-"""Drug-target interaction metrics and interpretation."""
+"""Drug-target interaction metrics."""

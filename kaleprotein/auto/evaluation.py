@@ -17,7 +17,7 @@ class MultiMetricEvaluator:
         task = config["task"]
         metric_names = config.get("evaluation", {}).get("metrics", [])
         if any(not EVALUATOR_REGISTRY.has((task, name)) for name in metric_names):
-            _import_task_module(task, "metrics")
+            _import_task_metrics(task)
         self.metrics = [(name, EVALUATOR_REGISTRY.get((task, name))()) for name in metric_names]
 
     def evaluate(self, outputs=None, data=None, labels=None, **prediction):
@@ -46,11 +46,11 @@ class MultiMetricEvaluator:
     __call__ = evaluate
 
 
-def _import_task_module(task, module):
+def _import_task_metrics(task):
     if not isinstance(task, str) or not task.isidentifier():
         raise ValueError(f"Task names used for Auto discovery must be identifiers; got {task!r}.")
     try:
-        importlib.import_module(f"kaleprotein.core.evaluation.tasks.{task}.{module}")
+        importlib.import_module(f"kaleprotein.core.evaluation.tasks.{task}.metrics")
     except ModuleNotFoundError as error:
         if error.name == f"kaleprotein.core.evaluation.tasks.{task}":
             return

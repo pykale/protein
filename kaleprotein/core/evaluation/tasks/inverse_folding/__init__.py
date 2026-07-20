@@ -1,1 +1,1 @@
-"""Inverse-folding metrics and interpretation."""
+"""Inverse-folding metrics."""

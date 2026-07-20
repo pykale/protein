@@ -1,4 +1,4 @@
-"""Reusable data, modeling, evaluation, configuration, and infrastructure."""
+"""Reusable data, modeling, evaluation, interpretation, and infrastructure."""
 
 from .config import AutoProteinConfig, ComponentSpec, StreamSpec
 from .registry import (

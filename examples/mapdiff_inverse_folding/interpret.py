@@ -1,4 +1,4 @@
-"""Evaluate a MapDiff checkpoint on PDB or processed CATH graphs."""
+"""Interpret MapDiff denoising trajectories for PDB or processed CATH graphs."""
 
 import argparse
 import json
@@ -9,6 +9,7 @@ import torch
 from kaleprotein.auto import (
     AutoProteinConfig,
     AutoProteinDataLoader,
+    AutoProteinInterpreter,
     AutoProteinModel,
 )
 from examples._utils import move_to_device
@@ -19,7 +20,11 @@ def build_parser():
     parser.add_argument("data", type=Path)
     weights = parser.add_mutually_exclusive_group()
     weights.add_argument("--checkpoint", type=Path)
-    weights.add_argument("--pretrained", action="store_true", help="Resolve and strictly load the configured v1.0.1 release.")
+    weights.add_argument(
+        "--pretrained",
+        action="store_true",
+        help="Resolve and strictly load the configured v1.0.1 release.",
+    )
     parser.add_argument("--steps", type=int, default=50)
     parser.add_argument("--method", choices=("ddim", "ddpm"), default="ddim")
     parser.add_argument("--num-samples", type=int, default=1)
@@ -44,19 +49,18 @@ def main(argv=None):
         num_workers=args.num_workers,
     )
 
-    # 2. Build the complete model and load requested weights.
+    # 2. Build the model and independent trajectory interpreter.
     model = AutoProteinModel(
         "InverseFolding/MapDiff",
         pretrain=args.pretrained,
         checkpoint=args.checkpoint,
     ).to(args.device)
+    interpreter = AutoProteinInterpreter.from_config(config)
     model.eval()
 
-    # 3. Embed structural conditions and generate sequences for every batch.
-    sequences = []
-    recovery_references = []
-    perplexity_references = []
-    logits = []
+    # 3. Embed, generate, and interpret every prepared batch.
+    interpretations = []
+    final_sequences = []
     with torch.no_grad():
         for inputs in loader:
             inputs = move_to_device(inputs, args.device)
@@ -67,26 +71,18 @@ def main(argv=None):
                 method=args.method,
                 num_samples=args.num_samples,
             )
-            references = list(generation["reference_sequences"])
-            sequences.extend(generation["sequences"])
-            recovery_references.extend(references * args.num_samples)
-            perplexity_references.extend(references)
-            if generation.get("logits") is not None:
-                logits.append(generation["logits"].detach().cpu())
-    if not sequences:
-        raise ValueError("Cannot evaluate an empty inverse-folding dataset.")
+            interpretation = interpreter.explain(**generation)
+            interpretations.append(interpretation)
+            final_sequences.extend(interpretation["final_sequences"])
+    if not interpretations:
+        raise ValueError("Cannot interpret an empty inverse-folding dataset.")
 
-    # 4. Evaluate the collected generation mapping.
-    collected = {
-        "sequences": sequences,
-        "reference_sequences": recovery_references,
-        "perplexity_reference_sequences": perplexity_references,
-        "logits": torch.cat(logits) if logits else None,
+    result = {
+        "batches": interpretations,
+        "final_sequences": final_sequences,
     }
-    metrics = model.evaluate(**collected)
-    result = {"metrics": metrics}
     print(json.dumps(result, indent=2))
-    return metrics
+    return result
 
 
 if __name__ == "__main__":

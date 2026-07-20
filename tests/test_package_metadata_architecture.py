@@ -60,12 +60,19 @@ def test_repository_uses_auto_core_examples_layers_only():
     assert (package / "core" / "modeling" / "modalities" / "sequence").is_dir()
     assert (package / "core" / "modeling" / "tasks" / "dti").is_dir()
     assert (package / "core" / "evaluation" / "tasks" / "dti").is_dir()
+    assert (package / "core" / "interpretation" / "tasks" / "dti").is_dir()
     assert (package / "core" / "modeling" / "modalities" / "sequence" / "embedders.py").is_file()
     assert (package / "core" / "modeling" / "tasks" / "dti" / "predictors.py").is_file()
     assert (package / "core" / "evaluation" / "tasks" / "dti" / "metrics.py").is_file()
     assert (
-        package / "core" / "evaluation" / "tasks" / "inverse_folding" / "interpreters.py"
+        package
+        / "core"
+        / "interpretation"
+        / "tasks"
+        / "inverse_folding"
+        / "interpreters.py"
     ).is_file()
+    assert not any((package / "core" / "evaluation").rglob("interpreters.py"))
     assert (root / "examples" / "drugban_dti" / "modeling.py").is_file()
     assert (root / "examples" / "drugban_dti" / "collators.py").is_file()
     assert (root / "examples" / "mapdiff_inverse_folding" / "modeling.py").is_file()
@@ -97,5 +104,6 @@ def test_example_models_do_not_own_data_workflow_objects():
             "make_dataloader",
             "LazyPreprocessedDataset",
             "load_requested_checkpoint",
+            "extract_attention",
         ):
             assert forbidden not in source, f"{relative_path} contains {forbidden}"

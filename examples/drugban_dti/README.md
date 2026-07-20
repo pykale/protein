@@ -66,10 +66,11 @@ embeddings = model.embed(**inputs)
 # 5. Predict interactions from the named embeddings.
 prediction = model.predict(**embeddings)
 
-# 6. Evaluate or expose attention from the prediction mapping.
+# 6a. Evaluate the prediction mapping.
 metrics = model.evaluate(**prediction)
-attention = model.extract_attention(**prediction)
-interpretation = AutoProteinInterpreter.from_config(config).explain(**attention)
+
+# 6b. Independently interpret its attention fields when needed.
+interpretation = AutoProteinInterpreter.from_config(config).explain(**prediction)
 ```
 
 The stage contracts are ordinary dictionaries. In particular, `embed()`
@@ -128,7 +129,8 @@ python -m examples.drugban_dti.interpret \
   checkpoint saving.
 - `evaluate.py` computes AUROC, AUPRC, F1, accuracy, and threshold metrics.
 - `predict.py` performs inference only for a CSV or one SMILES/sequence pair.
-- `interpret.py` maps BAN attention to valid atoms and protein residues.
+- `interpret.py` independently maps BAN attention to valid atoms and protein
+  residues; evaluation does not invoke it.
 
 ## Pretrained Weights
 
