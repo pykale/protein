@@ -18,7 +18,6 @@ kaleprotein/
   evaluate/
   interpret/
   utils/
-  weights/
 examples/
 tests/
 docs/
@@ -34,8 +33,7 @@ flowchart TB
         MODEL_COMPONENTS["model/<br/>embed + predict"]
         EVALUATE["evaluate/<br/>task metrics"]
         INTERPRET["interpret/<br/>task explanations"]
-        UTILS["utils/<br/>file + structure parsers"]
-        WEIGHTS["weights/"]
+        UTILS["utils/<br/>parsers + checkpoint helpers"]
       end
 
       subgraph AUTO["auto: selection and construction"]
@@ -230,8 +228,10 @@ flowchart LR
   generators.
 - `evaluate/tasks/` owns quantitative task metrics.
 - `interpret/tasks/` owns reusable task interpretation methods.
-- `weights/` remains first-level because both Auto checkpoint resolution and
-  concrete model checkpoint adapters use it.
+- `auto/model.py` owns pretrained path resolution, downloading, checksum policy,
+  and missing-weight errors.
+- `utils/checkpoint.py` owns model-independent checkpoint loading and state-dict
+  extraction used by concrete model adapters.
 - `examples/<model>/` owns concrete model composition, model-specific layers,
   collators, feature graphs, forward/generate behavior, scripts, and checkpoint
   state adapters. Collators remain separate from model classes.

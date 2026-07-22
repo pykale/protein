@@ -44,8 +44,7 @@ kaleprotein/
     predict/                    # <task>_<model>.py heads and generators
   evaluate/tasks/               # quantitative task metrics
   interpret/tasks/              # optional task interpretation
-  utils/                        # FASTA, CSV/TSV, PDB, and mmCIF parsing
-  weights/                      # shared checkpoint resolution and loading
+  utils/                        # parsers and generic checkpoint helpers
 examples/                       # complete named model implementations
   drugban_dti/
   mapdiff_inverse_folding/
@@ -291,6 +290,10 @@ model = AutoProteinModel("MyTask/MyModel")
 See [CUSTOMIZE.md](CUSTOMIZE.md) for a complete extension example.
 
 ## Pretrained Assets
+
+The `weights/` directories shown in model-card layouts are example-local asset
+folders, not a `kaleprotein.weights` Python package. Auto owns pretrained
+resolution; generic checkpoint parsing lives in `kaleprotein.utils.checkpoint`.
 
 For `pretrain=True`, the full model:
 
