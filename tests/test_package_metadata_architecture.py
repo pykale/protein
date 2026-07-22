@@ -67,6 +67,7 @@ def test_repository_uses_flat_verb_oriented_package_layers():
     ):
         assert not (package / "auto" / legacy_auto_module).exists()
     assert (package / "utils" / "fasta.py").is_file()
+    assert (package / "utils" / "checkpoint.py").is_file()
     assert (package / "utils" / "pdb.py").is_file()
     assert (package / "utils" / "mmcif.py").is_file()
     assert (package / "loaddata" / "base_dataset.py").is_file()
@@ -92,6 +93,7 @@ def test_repository_uses_flat_verb_oriented_package_layers():
     assert (root / "tests" / "test_registry.py").is_file()
     assert (root / "docs" / "architecture.md").is_file()
     assert not (package / "core").exists()
+    assert not (package / "weights").exists()
     assert not (package / "examples").exists()
     assert not (package / "tests").exists()
 

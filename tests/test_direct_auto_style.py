@@ -12,7 +12,7 @@ from kaleprotein.auto import (
     AutoProteinInterpreter,
     AutoProteinModel,
 )
-from kaleprotein.weights import resolve_pretrained_weight
+from kaleprotein.auto.model import resolve_pretrained_weight
 
 
 def test_model_ids_are_card_driven_not_auto_hardcoded():

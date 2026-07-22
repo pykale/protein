@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import importlib
+import os
+import tempfile
+from pathlib import Path
+from urllib.request import urlretrieve
 
-from kaleprotein.weights import resolve_pretrained_weight
+from kaleprotein.utils.checkpoint import verify_checksum
 
 from .config import AutoProteinConfig, ComponentSpec
 from .registry import EMBEDDER_REGISTRY, PREDICTOR_REGISTRY
@@ -50,6 +54,43 @@ def _import_shared_component_namespace(registry, component_id):
         if error.name == module_name:
             return
         raise
+
+
+def resolve_pretrained_weight(config, downloader=urlretrieve):
+    """Resolve and, when configured, download a model card's checkpoint."""
+    block = config.get("pretrained", {})
+    config_dir = Path(config.get("_config_dir", "."))
+    local_dir = config_dir / block.get("local_dir", "weights")
+    filename = block.get("filename")
+    if not filename:
+        raise ValueError(_missing_weight_message(config))
+
+    weight_path = local_dir / filename
+    expected_checksum = block.get("sha256")
+    if weight_path.is_file():
+        verify_checksum(weight_path, expected_checksum)
+        return weight_path
+
+    url = block.get("url")
+    if not _valid_url(url):
+        raise ValueError(_missing_weight_message(config))
+
+    weight_path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=weight_path.parent,
+        prefix=f".{weight_path.name}.",
+        suffix=".part",
+    )
+    os.close(descriptor)
+    temporary_path = Path(temporary_name)
+    try:
+        downloader(url, temporary_path)
+        verify_checksum(temporary_path, expected_checksum)
+        os.replace(temporary_path, weight_path)
+    except BaseException:
+        temporary_path.unlink(missing_ok=True)
+        raise
+    return weight_path
 
 
 class AutoProteinModel:
@@ -119,4 +160,23 @@ class AutoProteinPredictor:
         return PREDICTOR_REGISTRY.register(component_id, implementation, aliases=aliases)
 
 
-__all__ = ["AutoProteinEmbedder", "AutoProteinModel", "AutoProteinPredictor"]
+def _valid_url(url):
+    return isinstance(url, str) and url.startswith(("https://", "http://"))
+
+
+def _missing_weight_message(config):
+    model_id = config.get("model_id", config.get("name", "this model"))
+    return (
+        f"No pretrained weight file is available for {model_id}. "
+        "Place the expected file in this model card's weights/ folder, provide "
+        "a valid URL in config.yaml, or train the model yourself with "
+        "pretrain=False."
+    )
+
+
+__all__ = [
+    "AutoProteinEmbedder",
+    "AutoProteinModel",
+    "AutoProteinPredictor",
+    "resolve_pretrained_weight",
+]
