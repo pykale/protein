@@ -1,6 +1,22 @@
 import pytest
 
-from kaleprotein.utils import parse_mmcif, parse_pdb, read_csv, read_fasta, read_tsv
+from kaleprotein.utils import (
+    move_to_device,
+    parse_mmcif,
+    parse_pdb,
+    read_csv,
+    read_fasta,
+    read_tsv,
+)
+
+
+class _Movable:
+    def __init__(self):
+        self.device = None
+
+    def to(self, device):
+        self.device = device
+        return self
 
 
 def test_fasta_and_tabular_readers_are_dataset_independent(tmp_path):
@@ -70,3 +86,16 @@ def test_fasta_reader_rejects_sequence_before_header(tmp_path):
 
     with pytest.raises(ValueError, match="before the first header"):
         read_fasta(path)
+
+
+def test_move_to_device_preserves_nested_container_shapes():
+    first = _Movable()
+    second = _Movable()
+
+    moved = move_to_device(
+        {"list": [first, "metadata"], "tuple": (second, 3)},
+        "test-device",
+    )
+
+    assert moved == {"list": [first, "metadata"], "tuple": (second, 3)}
+    assert first.device == second.device == "test-device"

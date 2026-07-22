@@ -12,7 +12,7 @@ from kaleprotein.auto import (
     AutoProteinInterpreter,
     AutoProteinModel,
 )
-from examples._utils import move_to_device
+from kaleprotein.utils import move_to_device
 
 
 def build_parser():

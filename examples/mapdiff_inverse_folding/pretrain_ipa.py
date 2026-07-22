@@ -10,7 +10,7 @@ from kaleprotein.auto import (
     AutoProteinDataLoader,
     AutoProteinModel,
 )
-from examples._utils import move_to_device
+from kaleprotein.utils import move_to_device
 from examples.mapdiff_inverse_folding.collators import MapDiffIPACollator
 
 
