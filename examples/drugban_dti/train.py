@@ -18,7 +18,7 @@ from kaleprotein.auto import (
     AutoProteinDataLoader,
     AutoProteinModel,
 )
-from examples._utils import move_to_device
+from kaleprotein.utils import move_to_device
 from examples.drugban_dti._cli import (
     add_data_arguments,
     print_json,
