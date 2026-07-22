@@ -1,5 +1,5 @@
 import pytest
-from kaleprotein.core.registry.base import Registry
+from kaleprotein.auto.registry.base import Registry
 
 def test_registry_register_get_available_and_missing():
     r=Registry('thing')

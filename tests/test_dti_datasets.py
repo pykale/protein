@@ -1,10 +1,10 @@
 import pytest
 
 from kaleprotein.auto import AutoProteinData
-from kaleprotein.core.data.datasets import DTIDataset
-from kaleprotein.core.data.bindingdb import BindingDBDTIDataset
-from kaleprotein.core.data.biosnap import BioSNAPDTIDataset
-from kaleprotein.core.data.human import HumanDTIDataset
+from kaleprotein.loaddata.base_dataset import DTIDataset
+from kaleprotein.loaddata.bindingdb import BindingDBDTIDataset
+from kaleprotein.loaddata.biosnap import BioSNAPDTIDataset
+from kaleprotein.loaddata.human import HumanDTIDataset
 
 
 def test_bindingdb_full_loader_normalizes_drugban_columns(tmp_path):

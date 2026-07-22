@@ -1,17 +1,18 @@
 # Extending KaleProtein
 
-KaleProtein separates generic Auto dispatch, reusable core components, and
-complete named models. Adding a model normally changes only one model-card
-directory.
+KaleProtein separates generic Auto dispatch, reusable first-level operation
+packages, and complete named models. Adding a model normally changes only one
+model-card directory.
 
 ## Add Reusable Data
 
-Built-in dataset adapters live directly in `core/data/<dataset>.py` and register
-a stable `Dataset/Task` id. Fundamental readers such as FASTA, tabular, PDB, and
-mmCIF parsing belong in `core/data/utils/`:
+Built-in dataset adapters live in `loaddata/<dataset>.py` and register a stable
+`Dataset/Task` id. Shared bases live in `loaddata/base_dataset.py`; fundamental
+FASTA, tabular, PDB, and mmCIF readers belong in `utils/`:
 
 ```python
-from kaleprotein.core.registry import DATASET_REGISTRY
+from kaleprotein.auto.registry import DATASET_REGISTRY
+from kaleprotein.loaddata.base_dataset import DTIDataset
 
 
 @DATASET_REGISTRY.register("MyDataset/DTI")
@@ -30,11 +31,11 @@ must not import a concrete model.
 
 ## Add A Reusable Preprocessor
 
-Reusable transformations belong in `core/preprocessing/`, outside the loading
+Reusable transformations belong in `prepdata/`, outside the loading
 and parsing layer:
 
 ```python
-from kaleprotein.core.registry import PREPROCESSOR_REGISTRY
+from kaleprotein.auto.registry import PREPROCESSOR_REGISTRY
 
 
 @PREPROCESSOR_REGISTRY.register(
@@ -58,8 +59,12 @@ class MyTokenizer:
 ## Add Reusable Model Components
 
 Reusable modality encoders register as embedders. Reusable task fusion and
-heads register as predictors. Put them in `core/modeling/modalities/` and
-`core/modeling/tasks/`, respectively:
+heads register as predictors. Their ids map directly to flat files:
+
+```text
+sequence/my_encoder       -> model/embed/sequence_my_encoder.py
+classification/my_head    -> model/predict/classification_my_head.py
+```
 
 ```python
 from torch import nn
@@ -95,9 +100,9 @@ class MyClassificationHead(nn.Module):
         }
 ```
 
-Put a component in core only when it is genuinely useful to more than one
-named model. Model-specific layers can register from the example's
-`modeling.py` instead.
+Put a component in the shared `model/` package only when it is genuinely useful
+to more than one named model. Model-specific layers can register from the
+example's `model_<name>.py` instead.
 
 ## Add A Complete Model Card
 
@@ -108,7 +113,7 @@ examples/my_model/
   __init__.py
   config.yaml
   configuration.py
-  modeling.py
+  model_my_model.py
   README.md
   data/
   maps/
@@ -126,7 +131,7 @@ objective: discriminative
 
 auto_map:
   AutoProteinConfig: configuration.MyModelConfig
-  AutoProteinModel: modeling.MyModel
+  AutoProteinModel: model_my_model.MyModel
 
 pretrained:
   local_dir: weights
@@ -172,11 +177,11 @@ The full model is the composition root and sole full-checkpoint owner:
 from torch import nn
 
 from kaleprotein.auto import AutoProteinEmbedder, AutoProteinPredictor
-from kaleprotein.core.weights import load_checkpoint_state_dict, resolve_pretrained_weight
+from kaleprotein.weights import load_checkpoint_state_dict
 
 
 class MyModel(nn.Module):
-    def __init__(self, config, pretrain=False):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.embedder = AutoProteinEmbedder.from_config(
@@ -185,17 +190,15 @@ class MyModel(nn.Module):
         self.predictor = AutoProteinPredictor.from_config(
             config.get_predictor(), config=config
         )
-        if pretrain:
-            path = resolve_pretrained_weight(config)
-            state = load_checkpoint_state_dict(path)
-            self.load_state_dict(adapt_checkpoint_keys(state), strict=True)
-
     def embed(self, tokens, mask, **metadata):
         return self.embedder.embed(tokens=tokens, mask=mask, **metadata)
 
-    def forward(self, **batch):
-        embeddings = self.embed(**batch)
+    def predict(self, **embeddings):
         return self.predictor(**embeddings)
+
+    def load_checkpoint(self, path):
+        state = load_checkpoint_state_dict(path)
+        return self.load_state_dict(adapt_checkpoint_keys(state), strict=True)
 ```
 
 Every stage should return a dictionary. The next stage consumes it with
@@ -214,7 +217,7 @@ Bundled cards are discovered from `config.yaml`. Register an external card
 without editing Auto:
 
 ```python
-from kaleprotein.core.registry import register_model_card
+from kaleprotein.auto.registry import register_model_card
 
 register_model_card("path/to/my_model/config.yaml")
 model = AutoProteinModel("MyTask/MyModel")
@@ -224,7 +227,7 @@ Never add model ids, model-name branches, or architecture tables to `auto/`.
 
 ## Checkpoints
 
-Use `core.weights` for local-first resolution, optional checksum verification,
+Use `kaleprotein.weights` for local-first resolution, optional checksum verification,
 atomic downloads, and common checkpoint extraction. Keep key conversion in the
 model card and require strict loading. Nested embedders and predictors should
 not independently resolve the complete model checkpoint.

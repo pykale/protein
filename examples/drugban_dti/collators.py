@@ -6,7 +6,7 @@ from typing import Any, Iterable
 
 import torch
 
-from kaleprotein.core.preprocessing.molecule import RDKitGraphProcessor
+from kaleprotein.prepdata.molecule import RDKitGraphProcessor
 
 
 PROTEIN_ALPHABET = {

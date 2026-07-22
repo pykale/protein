@@ -29,33 +29,23 @@ upstream checkout at runtime.
 
 ```text
 kaleprotein/
-  auto/                         # generic selection and construction only
-    configuration.py
-    data.py
-    preprocessing.py
-    modeling.py
-    evaluation.py
-    interpretation.py
-  core/                         # reusable building blocks
-    data/
-      utils/                    # FASTA, CSV/TSV, PDB, and mmCIF parsing
-      datasets.py               # shared dataset contracts
-      records.py                # stable sample and structure records
-      bindingdb.py              # one module per built-in dataset
-      biosnap.py
-      human.py
-      cath.py
-    preprocessing/              # reusable transforms, separate from loading
-    modeling/
-      modalities/               # reusable encoders and neural layers
-      tasks/                    # fusion, heads, predictors, generators
-    evaluation/
-      tasks/                    # task metrics
-    interpretation/
-      tasks/                    # task interpretation methods
-    registry/
+  auto/                         # generic selection, config, and registries
+    loaddata.py                  # dataset, collator, and batch-loader dispatch
+    prepdata.py
+    model.py
+    evaluate.py
+    interpret.py
     config/
-    weights/
+    registry/
+  loaddata/                     # datasets, records, and base_dataset.py
+  prepdata/                     # reusable input transformations
+  model/
+    embed/                      # <modality>_<model>.py encoders
+    predict/                    # <task>_<model>.py heads and generators
+  evaluate/tasks/               # quantitative task metrics
+  interpret/tasks/              # optional task interpretation
+  utils/                        # FASTA, CSV/TSV, PDB, and mmCIF parsing
+  weights/                      # shared checkpoint resolution and loading
 examples/                       # complete named model implementations
   drugban_dti/
   mapdiff_inverse_folding/
@@ -63,9 +53,9 @@ tests/                          # repository tests, not installed
 docs/
 ```
 
-`auto/` contains no DrugBAN or MapDiff branch. `core/` contains only reusable
-data, layers, heads, metrics, interpretation methods, and infrastructure.
-Concrete full-model assembly and checkpoint compatibility stay in each example. See the
+`auto/` contains no DrugBAN or MapDiff branch. Reusable operations are
+first-level verb-oriented packages beside Auto. Concrete full-model assembly
+and checkpoint compatibility stay in each example. See the
 [architecture diagram](docs/architecture.md).
 
 ## Installation
@@ -87,7 +77,7 @@ under the adjacent `examples/` directory. After installing a wheel, register a
 model card directory explicitly before using a named example model:
 
 ```python
-from kaleprotein.core.registry import discover_model_cards
+from kaleprotein.auto.registry import discover_model_cards
 
 discover_model_cards("path/to/model_cards")
 ```
@@ -162,6 +152,11 @@ AutoProteinEmbedder("sequence/cnn")
 AutoProteinEmbedder("molecule/gcn")
 AutoProteinPredictor("dti/ban")
 ```
+
+Shared component ids map directly to flat files: `molecule/gcn` resolves
+`model/embed/molecule_gcn.py`, `sequence/cnn` resolves
+`model/embed/sequence_cnn.py`, and `dti/ban` resolves
+`model/predict/dti_ban.py`.
 
 These component Auto APIs are primarily for model authors. They do not load a
 second full DrugBAN model and do not own full-model checkpoints.
@@ -274,7 +269,7 @@ Every named model owns its implementation and assets:
 examples/<model>/
   config.yaml
   configuration.py
-  modeling.py
+  model_<model_name>.py
   train/evaluate/predict/generate/interpret scripts
   data/
   maps/
@@ -287,7 +282,7 @@ new model card does not require editing `auto/`. External cards can be
 registered directly:
 
 ```python
-from kaleprotein.core.registry import register_model_card
+from kaleprotein.auto.registry import register_model_card
 
 register_model_card("path/to/my_model/config.yaml")
 model = AutoProteinModel("MyTask/MyModel")

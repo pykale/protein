@@ -12,18 +12,18 @@ from kaleprotein.auto import (
     AutoProteinInterpreter,
     AutoProteinModel,
 )
-from kaleprotein.core.weights import resolve_pretrained_weight
+from kaleprotein.weights import resolve_pretrained_weight
 
 
 def test_model_ids_are_card_driven_not_auto_hardcoded():
-    source = (Path(__file__).resolve().parents[1] / "kaleprotein" / "auto" / "modeling.py").read_text(
+    source = (Path(__file__).resolve().parents[1] / "kaleprotein" / "auto" / "model.py").read_text(
         encoding="utf-8"
     )
     assert "DTI/DrugBAN" not in source
     assert "InverseFolding/MapDiff" not in source
 
     config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
-    assert config["auto_map"]["AutoProteinModel"] == "modeling.DrugBANModel"
+    assert config["auto_map"]["AutoProteinModel"] == "model_drugban.DrugBANModel"
 
 
 def test_example_evaluations_expose_the_named_auto_pipeline():

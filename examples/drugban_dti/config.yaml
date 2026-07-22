@@ -6,7 +6,7 @@ objective: discriminative
 auto_map:
   AutoProteinConfig: configuration.DrugBANConfig
   AutoProteinCollator: collators.DrugBANCollator
-  AutoProteinModel: modeling.DrugBANModel
+  AutoProteinModel: model_drugban.DrugBANModel
 pretrained:
   local_dir: weights
   filename: drugban.pt

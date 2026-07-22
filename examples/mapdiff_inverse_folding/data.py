@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, fields
 from typing import Any
 
-from kaleprotein.core.data.records import AMINO_ACID_ALPHABET
+from kaleprotein.loaddata.records import AMINO_ACID_ALPHABET
 
 
 AA_ALPHABET = AMINO_ACID_ALPHABET

@@ -6,7 +6,7 @@ objective: generative
 auto_map:
   AutoProteinConfig: configuration.MapDiffConfig
   AutoProteinCollator: collators.MapDiffCollator
-  AutoProteinModel: modeling.MapDiffModel
+  AutoProteinModel: model_mapdiff.MapDiffModel
 pretrained:
   local_dir: weights
   filename: mapdiff_weight.pt

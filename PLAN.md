@@ -16,8 +16,11 @@ load -> preprocess -> collate -> embed -> predict/generate -> evaluate or interp
 ## Boundaries
 
 - `auto/` performs generic registration, selection, and construction. It knows
-  no concrete model names.
-- `core/` contains reusable registry, config, weight, modality, and task code.
+  no concrete model names. Its public modules mirror operation verbs.
+- `loaddata/`, `prepdata/`, `model/`, `evaluate/`, and `interpret/` are
+  first-level reusable operation packages; `utils/` owns fundamental parsers.
+- Auto configuration and registries live under `auto/`; shared checkpoint
+  helpers remain in first-level `weights/`.
 - `examples/<model>/` contains concrete full-model assembly, model-specific
   layers, scripts, assets, and checkpoint adapters.
 - `AutoProteinModel` returns a complete model. Inside that class,

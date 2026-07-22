@@ -1,14 +1,24 @@
 # KaleProtein Architecture
 
-The repository has three layers: generic Auto dispatch, reusable core
-components, and complete model examples. Only the `kaleprotein/` library package
-is installed; `examples/`, `tests/`, and `docs/` remain repository-level
-resources.
+The repository has three conceptual layers: generic Auto dispatch, reusable
+first-level operation packages, and complete model examples. Only the
+`kaleprotein/` library package is installed; `examples/`, `tests/`, and `docs/`
+remain repository-level resources.
 
 ```text
 kaleprotein/
   auto/
-  core/
+    config/
+    registry/
+  loaddata/
+  prepdata/
+  model/
+    embed/
+    predict/
+  evaluate/
+  interpret/
+  utils/
+  weights/
 examples/
 tests/
 docs/
@@ -17,15 +27,14 @@ docs/
 ```mermaid
 flowchart TB
     subgraph PACKAGE["installed package: kaleprotein/"]
-      subgraph CORE["core: shared and reusable"]
+      subgraph OPERATIONS["first-level reusable operations"]
         direction LR
-        CORE_DATA["data/<br/>utils + dataset modules + schemas"]
-        CORE_PREP["preprocessing/<br/>reusable transforms"]
-        CORE_MODELING["modeling/<br/>modalities + tasks"]
-        CORE_EVAL["evaluation/<br/>task metrics"]
-        CORE_INTERP["interpretation/<br/>task explanation methods"]
-        REGISTRY["registry/"]
-        CONFIG["config/"]
+        LOAD_DATA["loaddata/<br/>datasets + records"]
+        PREP_DATA["prepdata/<br/>reusable transforms"]
+        MODEL_COMPONENTS["model/<br/>embed + predict"]
+        EVALUATE["evaluate/<br/>task metrics"]
+        INTERPRET["interpret/<br/>task explanations"]
+        UTILS["utils/<br/>file + structure parsers"]
         WEIGHTS["weights/"]
       end
 
@@ -40,6 +49,8 @@ flowchart TB
         PREDICT["AutoProteinPredictor"]
         EVAL["AutoProteinEvaluator"]
         INTERP["AutoProteinInterpreter"]
+        CONFIG["config/"]
+        REGISTRY["registry/"]
         DATA --> LOADER
         PREP --> LOADER
         COLLATE --> LOADER
@@ -58,9 +69,9 @@ flowchart TB
         MORE["new model cards"]
     end
 
-    AUTO -->|"generic registry lookup"| CORE
+    AUTO -->|"generic registry lookup"| OPERATIONS
     MODEL -->|"auto_map"| EXAMPLES
-    EXAMPLES -->|"compose reusable components"| CORE
+    EXAMPLES -->|"compose reusable components"| OPERATIONS
 ```
 
 ## User API
@@ -79,7 +90,7 @@ loader = AutoProteinDataLoader(
 model = AutoProteinModel.from_config(config, pretrain=True)
 ```
 
-`AutoProteinModel` reads the model card and imports its `modeling.py`. It does
+`AutoProteinModel` reads the model card and imports its `model_<name>.py`. It does
 not contain a DrugBAN or MapDiff condition. `AutoProteinDataLoader` uses the
 data id only for normalized records and the config only for preprocessing and
 collation. It never creates or retains the model.
@@ -106,6 +117,18 @@ MapDiffModel
 For a discriminative model, the predictor is the task fusion/head. For a
 generative model, the predictor is the generator or denoiser. Component Auto
 classes are model-author APIs; they do not resolve full model cards.
+
+Reusable component ids map directly to flat module names:
+
+```text
+AutoProteinEmbedder("molecule/gcn") -> model/embed/molecule_gcn.py
+AutoProteinEmbedder("sequence/cnn") -> model/embed/sequence_cnn.py
+AutoProteinPredictor("dti/ban")     -> model/predict/dti_ban.py
+```
+
+The `{namespace}/{component}` id becomes
+`{namespace}_{component}.py`. Model-specific components may instead register
+when the example's `model_<name>.py` is imported.
 
 ## Named Stage Contracts
 
@@ -190,21 +213,25 @@ flowchart LR
 
 ## Ownership Rules
 
-- `auto/` owns generic dispatch and composition only. `AutoProteinDataLoader`
-  composes registered data components without importing a concrete model.
-- `core/data/utils/` owns fundamental FASTA, tabular, PDB, mmCIF, and file
-  parsing functions.
-- `core/data/<dataset>.py` owns built-in dataset adapters such as BindingDB,
-  BioSNAP, Human, and CATH. Public ids use `Dataset/Task` order.
-- `core/data/datasets.py` and `core/data/records.py` own shared dataset classes and
-  stable data records.
-- `core/preprocessing/` owns reusable transformations that prepare records for
-  model inputs without becoming dataset loaders.
-- `core/modeling/modalities/` owns reusable modality encoders and neural layers.
-- `core/modeling/tasks/` owns reusable fusion layers, heads, predictors, and
+- `auto/` owns generic dispatch, configuration, registration, and composition.
+  Its public modules mirror the operation verbs: `loaddata.py`, `prepdata.py`,
+  `model.py`, `evaluate.py`, and `interpret.py`. Dataset selection, collator
+  selection, and batch loading share `loaddata.py` because they form one data
+  pipeline.
+- `utils/` owns fundamental FASTA, tabular, PDB, mmCIF, and file parsing.
+- `loaddata/<dataset>.py` owns built-in adapters such as BindingDB, BioSNAP,
+  Human, and CATH. Public ids use `Dataset/Task` order.
+- `loaddata/base_dataset.py` and `loaddata/records.py` own shared dataset classes
+  and stable records.
+- `prepdata/` owns reusable transformations that prepare records for model
+  inputs without becoming dataset loaders.
+- `model/embed/` owns reusable modality and condition encoders.
+- `model/predict/` owns reusable fusion layers, heads, predictors, and
   generators.
-- `core/evaluation/tasks/` owns quantitative task metrics.
-- `core/interpretation/tasks/` owns reusable task interpretation methods.
+- `evaluate/tasks/` owns quantitative task metrics.
+- `interpret/tasks/` owns reusable task interpretation methods.
+- `weights/` remains first-level because both Auto checkpoint resolution and
+  concrete model checkpoint adapters use it.
 - `examples/<model>/` owns concrete model composition, model-specific layers,
   collators, feature graphs, forward/generate behavior, scripts, and checkpoint
   state adapters. Collators remain separate from model classes.
@@ -212,9 +239,9 @@ flowchart LR
   and the single call into the concrete model's `load_checkpoint()` adapter.
   Nested components never resolve or download that checkpoint again.
 
-Adding a new model normally adds one example directory and model card. Core is
-changed only when the model introduces a genuinely reusable component; Auto is
-not changed.
+Adding a new model normally adds one example directory and model card. A
+first-level reusable package changes only when the model introduces a genuinely
+reusable operation; Auto is not changed.
 
 In a source checkout, `kaleprotein` discovers cards from the adjacent
 `examples/` directory. Installed wheels do not include those examples; users or

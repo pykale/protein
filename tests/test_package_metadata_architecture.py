@@ -45,57 +45,72 @@ def test_base_import_and_dti_data_do_not_require_model_dependencies(tmp_path):
     assert result.returncode == 0, result.stderr
 
 
-def test_repository_uses_auto_core_examples_layers_only():
+def test_repository_uses_flat_verb_oriented_package_layers():
     root = Path(__file__).resolve().parents[1]
     package = root / "kaleprotein"
-    assert (package / "auto" / "modeling.py").is_file()
-    assert (package / "auto" / "collation.py").is_file()
-    assert (package / "core" / "registry").is_dir()
-    assert (package / "core" / "data" / "utils" / "fasta.py").is_file()
-    assert (package / "core" / "data" / "utils" / "pdb.py").is_file()
-    assert (package / "core" / "data" / "utils" / "mmcif.py").is_file()
-    assert (package / "core" / "data" / "bindingdb.py").is_file()
-    assert (package / "core" / "data" / "cath.py").is_file()
-    assert (package / "core" / "preprocessing" / "sequence.py").is_file()
-    assert (package / "core" / "modeling" / "modalities" / "sequence").is_dir()
-    assert (package / "core" / "modeling" / "tasks" / "dti").is_dir()
-    assert (package / "core" / "evaluation" / "tasks" / "dti").is_dir()
-    assert (package / "core" / "interpretation" / "tasks" / "dti").is_dir()
-    assert (package / "core" / "modeling" / "modalities" / "sequence" / "embedders.py").is_file()
-    assert (package / "core" / "modeling" / "tasks" / "dti" / "predictors.py").is_file()
-    assert (package / "core" / "evaluation" / "tasks" / "dti" / "metrics.py").is_file()
+    assert (package / "auto" / "model.py").is_file()
+    assert (package / "auto" / "loaddata.py").is_file()
+    assert (package / "auto" / "prepdata.py").is_file()
+    assert (package / "auto" / "evaluate.py").is_file()
+    assert (package / "auto" / "interpret.py").is_file()
+    assert (package / "auto" / "config" / "model_config.py").is_file()
+    assert (package / "auto" / "registry" / "base.py").is_file()
+    for legacy_auto_module in (
+        "configuration.py",
+        "data.py",
+        "preprocessing.py",
+        "collation.py",
+        "collate.py",
+        "modeling.py",
+        "evaluation.py",
+        "interpretation.py",
+    ):
+        assert not (package / "auto" / legacy_auto_module).exists()
+    assert (package / "utils" / "fasta.py").is_file()
+    assert (package / "utils" / "pdb.py").is_file()
+    assert (package / "utils" / "mmcif.py").is_file()
+    assert (package / "loaddata" / "base_dataset.py").is_file()
+    assert (package / "loaddata" / "bindingdb.py").is_file()
+    assert (package / "loaddata" / "cath.py").is_file()
+    assert (package / "prepdata" / "sequence.py").is_file()
+    assert (package / "model" / "embed" / "sequence_cnn.py").is_file()
+    assert (package / "model" / "embed" / "molecule_gcn.py").is_file()
+    assert (package / "model" / "predict" / "dti_ban.py").is_file()
+    assert (package / "evaluate" / "tasks" / "dti" / "metrics.py").is_file()
     assert (
         package
-        / "core"
-        / "interpretation"
+        / "interpret"
         / "tasks"
         / "inverse_folding"
         / "interpreters.py"
     ).is_file()
-    assert not any((package / "core" / "evaluation").rglob("interpreters.py"))
-    assert (root / "examples" / "drugban_dti" / "modeling.py").is_file()
+    assert not any((package / "evaluate").rglob("interpreters.py"))
+    assert (root / "examples" / "drugban_dti" / "model_drugban.py").is_file()
     assert (root / "examples" / "drugban_dti" / "collators.py").is_file()
-    assert (root / "examples" / "mapdiff_inverse_folding" / "modeling.py").is_file()
+    assert (root / "examples" / "mapdiff_inverse_folding" / "model_mapdiff.py").is_file()
     assert (root / "examples" / "mapdiff_inverse_folding" / "collators.py").is_file()
     assert (root / "tests" / "test_registry.py").is_file()
     assert (root / "docs" / "architecture.md").is_file()
+    assert not (package / "core").exists()
     assert not (package / "examples").exists()
     assert not (package / "tests").exists()
 
-    for legacy_data_dir in ("collators", "datasets", "modalities", "preprocessors", "tasks"):
-        assert not any((package / "core" / "data" / legacy_data_dir).rglob("*.py"))
-    assert not any((package / "core" / "modalities").rglob("*.py"))
-    assert not any((package / "core" / "tasks").rglob("*.py"))
+    for legacy in ("data", "evaluation", "interpretation", "preprocessing", "modeling"):
+        assert not (package / legacy).exists()
+    for deep_model_dir in ("modalities", "tasks"):
+        assert not (package / "model" / deep_model_dir).exists()
 
-    for legacy in ("registry", "modalities", "tasks", "fusion", "heads", "runners", "conditioners"):
-        assert not any((package / legacy).glob("*.py"))
+    source = "\n".join(
+        path.read_text(encoding="utf-8") for path in package.rglob("*.py")
+    )
+    assert "kaleprotein.core" not in source
 
 
 def test_example_models_do_not_own_data_workflow_objects():
     root = Path(__file__).resolve().parents[1]
     for relative_path in (
-        "examples/drugban_dti/modeling.py",
-        "examples/mapdiff_inverse_folding/modeling.py",
+        "examples/drugban_dti/model_drugban.py",
+        "examples/mapdiff_inverse_folding/model_mapdiff.py",
     ):
         source = (root / relative_path).read_text(encoding="utf-8")
         for forbidden in (
