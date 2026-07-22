@@ -2,9 +2,9 @@ from pathlib import Path
 
 
 def register_builtin_components():
-    from .core import data as _data  # noqa: F401
-    from .core import preprocessing as _preprocessing  # noqa: F401
-    from .core.registry import discover_model_cards
+    from . import loaddata as _loaddata  # noqa: F401
+    from . import prepdata as _prepdata  # noqa: F401
+    from .auto.registry import discover_model_cards
 
     package_dir = Path(__file__).resolve().parent
     repository_dir = package_dir.parent

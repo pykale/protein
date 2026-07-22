@@ -44,12 +44,12 @@ def test_auto_interpreter_discovers_inverse_folding_implementation_independently
 def test_auto_interpretation_does_not_import_evaluation_dispatch():
     root = Path(__file__).resolve().parents[1]
     interpretation_source = (
-        root / "kaleprotein" / "auto" / "interpretation.py"
+        root / "kaleprotein" / "auto" / "interpret.py"
     ).read_text(encoding="utf-8")
     evaluation_source = (
-        root / "kaleprotein" / "auto" / "evaluation.py"
+        root / "kaleprotein" / "auto" / "evaluate.py"
     ).read_text(encoding="utf-8")
 
     assert "from .evaluation" not in interpretation_source
-    assert "core.interpretation.tasks" in interpretation_source
+    assert "kaleprotein.interpret.tasks" in interpretation_source
     assert "INTERPRETER_REGISTRY" not in evaluation_source

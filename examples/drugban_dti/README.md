@@ -11,7 +11,7 @@ drugban_dti/
   config.yaml          component ids, dimensions, training and weight metadata
   configuration.py     DrugBANConfig
   collators.py         DrugBAN-specific tensor batching
-  modeling.py          pure model computation and checkpoint state adapter
+  model_drugban.py     pure model computation and checkpoint state adapter
   train.py
   evaluate.py
   predict.py
@@ -20,7 +20,7 @@ drugban_dti/
   weights/
 ```
 
-The complete model is assembled from reusable core components:
+The complete model is assembled from reusable first-level model components:
 
 ```text
 DrugBANModel

@@ -19,4 +19,12 @@ def test_drugban_complete_model_predicts(fake_rdkit_graph):
 
     assert "logits" in output and "probabilities" in output
     assert model.protein_embedder is not model.molecule_embedder
+    assert type(model.molecule_embedder).__module__ == (
+        "kaleprotein.model.embed.molecule_gcn"
+    )
+    assert type(model.protein_embedder).__module__ == (
+        "kaleprotein.model.embed.sequence_cnn"
+    )
+    assert type(model.predictor).__module__ == "kaleprotein.model.predict.dti_ban"
+    assert AutoProteinCollator.__module__ == "kaleprotein.auto.loaddata"
     assert callable(model.predict)

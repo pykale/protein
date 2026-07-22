@@ -1,6 +1,6 @@
 import pytest
 from kaleprotein.auto import AutoProteinConfig
-from kaleprotein.core.config import ComponentSpec, StreamSpec
+from kaleprotein.auto.config import ComponentSpec, StreamSpec
 
 def test_load_presets_and_streams():
     d=AutoProteinConfig.from_preset('drugban')

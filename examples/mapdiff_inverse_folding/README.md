@@ -12,7 +12,7 @@ mapdiff_inverse_folding/
   configuration.py
   collators.py
   data.py
-  modeling.py
+  model_mapdiff.py
   egnn.py
   ipa.py
   diffusion.py

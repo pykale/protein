@@ -1,10 +1,9 @@
-from .collation import AutoProteinCollator
-from .configuration import AutoProteinConfig
-from .data import AutoProteinData, AutoProteinDataLoader
-from .evaluation import AutoProteinEvaluator
-from .interpretation import AutoProteinInterpreter
-from .modeling import AutoProteinEmbedder, AutoProteinModel, AutoProteinPredictor
-from .preprocessing import AutoMoleculePreprocessor, AutoProteinPreprocessor
+from .config import AutoProteinConfig
+from .evaluate import AutoProteinEvaluator
+from .interpret import AutoProteinInterpreter
+from .loaddata import AutoProteinCollator, AutoProteinData, AutoProteinDataLoader
+from .model import AutoProteinEmbedder, AutoProteinModel, AutoProteinPredictor
+from .prepdata import AutoMoleculePreprocessor, AutoProteinPreprocessor
 
 __all__ = [
     "AutoMoleculePreprocessor",

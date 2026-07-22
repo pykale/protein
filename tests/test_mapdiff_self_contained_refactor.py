@@ -6,16 +6,16 @@ import pytest
 import torch
 
 from kaleprotein.auto import AutoProteinConfig, AutoProteinModel
-from examples.mapdiff_inverse_folding.modeling import MapDiffModel
+from examples.mapdiff_inverse_folding.model_mapdiff import MapDiffModel
 from examples.mapdiff_inverse_folding.upstream_compat import UpstreamMapDiff
 from examples.mapdiff_inverse_folding.collators import CollatorDiff, CollatorIPAPretrain
 from examples.mapdiff_inverse_folding.data import build_residue_graph
-from kaleprotein.core.data.cath import CATHDataset
-from kaleprotein.core.preprocessing.structure import BackboneCoordinateProcessor
-from kaleprotein.core.evaluation.tasks.inverse_folding.metrics import Diversity, Perplexity, SequenceRecovery
-from kaleprotein.core.interpretation.tasks.inverse_folding.interpreters import (
+from kaleprotein.evaluate.tasks.inverse_folding.metrics import Diversity, Perplexity, SequenceRecovery
+from kaleprotein.interpret.tasks.inverse_folding.interpreters import (
     DenoisingTrajectoryInterpreter,
 )
+from kaleprotein.loaddata.cath import CATHDataset
+from kaleprotein.prepdata.structure import BackboneCoordinateProcessor
 
 
 def _coords(length=4, shift=0.0):
@@ -40,7 +40,7 @@ def _tiny_config(tmp_path=None, filename="weights.pt"):
         "_config_dir": str(example_dir),
         "task": "inverse_folding",
         "objective": "generative",
-        "auto_map": {"AutoProteinModel": "modeling.MapDiffModel"},
+        "auto_map": {"AutoProteinModel": "model_mapdiff.MapDiffModel"},
         "streams": {
             "structure": {
                 "modality": "structure",

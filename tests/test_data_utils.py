@@ -1,6 +1,6 @@
 import pytest
 
-from kaleprotein.core.data.utils import parse_mmcif, parse_pdb, read_csv, read_fasta, read_tsv
+from kaleprotein.utils import parse_mmcif, parse_pdb, read_csv, read_fasta, read_tsv
 
 
 def test_fasta_and_tabular_readers_are_dataset_independent(tmp_path):

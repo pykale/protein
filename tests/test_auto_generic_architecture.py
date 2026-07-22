@@ -7,9 +7,9 @@ from kaleprotein.auto import (
     AutoProteinPredictor,
     AutoProteinPreprocessor,
 )
-from kaleprotein.core.registry import MODEL_CARD_REGISTRY, PREPROCESSOR_REGISTRY
-from kaleprotein.core.registry.base import Registry
-from kaleprotein.core.registry.model_cards import discover_model_cards
+from kaleprotein.auto.registry import MODEL_CARD_REGISTRY, PREPROCESSOR_REGISTRY
+from kaleprotein.auto.registry.base import Registry
+from kaleprotein.auto.registry.model_cards import discover_model_cards
 
 
 def _fake_card_text(model_id="Architecture/Fake", name="architecture-fake"):
@@ -19,7 +19,7 @@ name: {name}
 task: fake_task
 objective: generative
 auto_map:
-  AutoProteinModel: modeling.RelativeModel
+  AutoProteinModel: model_relative.RelativeModel
 streams:
   input:
     modality: architecture
@@ -67,7 +67,7 @@ def test_auto_source_has_no_model_specific_tables_or_names():
 
 def test_concrete_model_classes_live_only_in_examples():
     package = Path(__file__).resolve().parents[1] / "kaleprotein"
-    shared_files = list((package / "auto").rglob("*.py")) + list((package / "core").rglob("*.py"))
+    shared_files = list(package.rglob("*.py"))
     source = "\n".join(path.read_text(encoding="utf-8") for path in shared_files)
 
     assert "DrugBAN" not in source
@@ -124,7 +124,7 @@ def test_new_card_composes_registered_components_without_auto_changes(tmp_path):
 
     config_path = tmp_path / "config.yaml"
     config_path.write_text(_fake_card_text("Architecture/Relative", "relative"), encoding="utf-8")
-    (tmp_path / "modeling.py").write_text(
+    (tmp_path / "model_relative.py").write_text(
         "from kaleprotein.auto import AutoProteinEmbedder, AutoProteinPredictor\n"
         "class RelativeModel:\n"
         "    def __init__(self, config):\n"

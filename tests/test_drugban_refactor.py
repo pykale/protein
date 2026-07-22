@@ -6,12 +6,12 @@ import torch
 
 from kaleprotein.auto import AutoProteinConfig, AutoProteinModel, AutoProteinPreprocessor
 from examples.drugban_dti.collators import DrugBANCollator
-from examples.drugban_dti.modeling import DrugBANModel
-from kaleprotein.core.preprocessing import molecule as processors
-from kaleprotein.core.evaluation.tasks.dti.metrics import (
+from examples.drugban_dti.model_drugban import DrugBANModel
+from kaleprotein.evaluate.tasks.dti.metrics import (
     MetricUndefinedError,
     compute_metrics,
 )
+from kaleprotein.prepdata import molecule as processors
 
 
 class _FakeHybridization:
@@ -210,7 +210,7 @@ def test_checkpoint_round_trip(tiny_config, tmp_path):
 
 
 def test_complete_model_resolves_pretrained_checkpoint_once(tiny_config, tmp_path, monkeypatch):
-    import kaleprotein.auto.modeling as auto_modeling
+    import kaleprotein.auto.model as auto_modeling
 
     source = DrugBANModel(tiny_config)
     checkpoint = source.save_checkpoint(tmp_path / "drugban.pt")
