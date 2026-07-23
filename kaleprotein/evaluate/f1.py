@@ -1,12 +1,11 @@
 """Binary classification F1 score."""
 
 from kaleprotein.auto.registry import EVALUATOR_REGISTRY
-
-from ._binary import labels_from, probabilities_from, validate_binary
+from kaleprotein.utils import extract_binary_inputs, validate_binary_inputs
 
 
 def f1_score(labels, probabilities, threshold=0.5):
-    labels, probabilities = validate_binary(labels, probabilities)
+    labels, probabilities = validate_binary_inputs(labels, probabilities)
     predictions = [
         int(probability >= threshold) for probability in probabilities
     ]
@@ -31,9 +30,8 @@ class F1:
         self.threshold = threshold
 
     def __call__(self, outputs, data):
-        return f1_score(
-            labels_from(data), probabilities_from(outputs), self.threshold
-        )
+        labels, probabilities = extract_binary_inputs(outputs, data)
+        return f1_score(labels, probabilities, self.threshold)
 
 
 EVALUATOR_REGISTRY.register(("dti", "f1"), F1)

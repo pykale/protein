@@ -1,17 +1,15 @@
 """Area under the precision-recall curve."""
 
 from kaleprotein.auto.registry import EVALUATOR_REGISTRY
-
-from ._binary import (
+from kaleprotein.utils import (
     MetricUndefinedError,
-    labels_from,
-    probabilities_from,
-    validate_binary,
+    extract_binary_inputs,
+    validate_binary_inputs,
 )
 
 
 def auprc_score(labels, probabilities):
-    labels, probabilities = validate_binary(labels, probabilities)
+    labels, probabilities = validate_binary_inputs(labels, probabilities)
     positive_count = sum(labels)
     if positive_count == 0:
         raise MetricUndefinedError(
@@ -42,7 +40,8 @@ def auprc_score(labels, probabilities):
 
 class AUPRC:
     def __call__(self, outputs, data):
-        return auprc_score(labels_from(data), probabilities_from(outputs))
+        labels, probabilities = extract_binary_inputs(outputs, data)
+        return auprc_score(labels, probabilities)
 
 
 EVALUATOR_REGISTRY.register(("dti", "auprc"), AUPRC)

@@ -48,7 +48,10 @@ kaleprotein/
   interpret/                    # one interpretation method per file
     bilinear_attention_map.py
     denoising_trajectory.py
-  utils/                        # parsers and generic checkpoint helpers
+  utils/                        # <step>_<helper_function>.py helpers
+    loaddata_read_fasta.py
+    model_load_checkpoint_state_dict.py
+    evaluate_extract_binary_inputs.py
 examples/                       # complete named model implementations
   drugban_dti/
   mapdiff_inverse_folding/
@@ -297,7 +300,8 @@ See [CUSTOMIZE.md](CUSTOMIZE.md) for a complete extension example.
 
 The `weights/` directories shown in model-card layouts are example-local asset
 folders, not a `kaleprotein.weights` Python package. Auto owns pretrained
-resolution; generic checkpoint parsing lives in `kaleprotein.utils.checkpoint`.
+resolution; generic checkpoint parsing lives in
+`kaleprotein.utils.model_load_checkpoint_state_dict`.
 
 For `pretrain=True`, the full model:
 

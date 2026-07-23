@@ -66,11 +66,32 @@ def test_repository_uses_flat_verb_oriented_package_layers():
         "interpretation.py",
     ):
         assert not (package / "auto" / legacy_auto_module).exists()
-    assert (package / "utils" / "fasta.py").is_file()
-    assert (package / "utils" / "checkpoint.py").is_file()
-    assert (package / "utils" / "device.py").is_file()
-    assert (package / "utils" / "pdb.py").is_file()
-    assert (package / "utils" / "mmcif.py").is_file()
+    expected_utils = {
+        "evaluate_build_sequence_targets.py",
+        "evaluate_extract_binary_inputs.py",
+        "evaluate_extract_sequences.py",
+        "loaddata_make_backbone_record.py",
+        "loaddata_parse_mmcif.py",
+        "loaddata_parse_pdb.py",
+        "loaddata_read_dict_rows.py",
+        "loaddata_read_fasta.py",
+        "loaddata_require_file.py",
+        "loaddata_safe_path_part.py",
+        "model_load_checkpoint_state_dict.py",
+        "model_move_to_device.py",
+        "model_verify_checksum.py",
+    }
+    utils_dir = package / "utils"
+    assert {
+        path.name for path in utils_dir.glob("*.py") if path.name != "__init__.py"
+    } == expected_utils
+    operation_steps = {"loaddata", "prepdata", "model", "evaluate", "interpret"}
+    for helper_path in utils_dir.glob("*.py"):
+        if helper_path.name == "__init__.py":
+            continue
+        step, separator, helper_name = helper_path.stem.partition("_")
+        assert separator and helper_name
+        assert step in operation_steps
     assert (package / "loaddata" / "base_dataset.py").is_file()
     assert (package / "loaddata" / "bindingdb.py").is_file()
     assert (package / "loaddata" / "cath.py").is_file()
@@ -94,6 +115,8 @@ def test_repository_uses_flat_verb_oriented_package_layers():
         assert (package / "interpret" / f"{interpreter}.py").is_file()
     assert not (package / "evaluate" / "tasks").exists()
     assert not (package / "interpret" / "tasks").exists()
+    assert not (package / "evaluate" / "_binary.py").exists()
+    assert not (package / "evaluate" / "_sequence.py").exists()
     assert not any((package / "evaluate").rglob("interpreters.py"))
     assert (root / "examples" / "drugban_dti" / "model_drugban.py").is_file()
     assert (root / "examples" / "drugban_dti" / "collators.py").is_file()

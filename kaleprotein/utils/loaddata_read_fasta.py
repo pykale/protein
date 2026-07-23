@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from kaleprotein.loaddata.records import SequenceRecord
-from .files import require_file
+from .loaddata_require_file import require_file
 
 
 def read_fasta(path, *, alphabet=None, uppercase=True):

@@ -3,13 +3,12 @@
 import math
 
 from kaleprotein.auto.registry import EVALUATOR_REGISTRY
-
-from ._binary import labels_from, probabilities_from, validate_binary
+from kaleprotein.utils import extract_binary_inputs, validate_binary_inputs
 from .f1 import f1_score
 
 
 def optimal_f1_threshold(labels, probabilities):
-    labels, probabilities = validate_binary(labels, probabilities)
+    labels, probabilities = validate_binary_inputs(labels, probabilities)
     candidates = sorted(set(probabilities), reverse=True)
     candidates.append(math.nextafter(min(candidates), -math.inf))
     return max(
@@ -23,9 +22,8 @@ def optimal_f1_threshold(labels, probabilities):
 
 class Threshold:
     def __call__(self, outputs, data):
-        return optimal_f1_threshold(
-            labels_from(data), probabilities_from(outputs)
-        )
+        labels, probabilities = extract_binary_inputs(outputs, data)
+        return optimal_f1_threshold(labels, probabilities)
 
 
 EVALUATOR_REGISTRY.register(("dti", "threshold"), Threshold)

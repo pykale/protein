@@ -33,7 +33,7 @@ flowchart TB
         MODEL_COMPONENTS["model/<br/>embed + predict"]
         EVALUATE["evaluate/<br/>one metric per file"]
         INTERPRET["interpret/<br/>one interpreter per file"]
-        UTILS["utils/<br/>parsers + checkpoint helpers"]
+        UTILS["utils/<br/>&lt;step&gt;_&lt;helper&gt;.py"]
       end
 
       subgraph AUTO["auto: selection and construction"]
@@ -216,7 +216,10 @@ flowchart LR
   `model.py`, `evaluate.py`, and `interpret.py`. Dataset selection, collator
   selection, and batch loading share `loaddata.py` because they form one data
   pipeline.
-- `utils/` owns fundamental FASTA, tabular, PDB, mmCIF, and file parsing.
+- `utils/<step>_<helper_function>.py` owns stateless cross-component helpers.
+  The step prefix is one of `loaddata`, `prepdata`, `model`, `evaluate`, or
+  `interpret`; examples include `loaddata_parse_pdb.py`,
+  `model_move_to_device.py`, and `evaluate_extract_sequences.py`.
 - `loaddata/<dataset>.py` owns built-in adapters such as BindingDB, BioSNAP,
   Human, and CATH. Public ids use `Dataset/Task` order.
 - `loaddata/base_dataset.py` and `loaddata/records.py` own shared dataset classes
@@ -232,8 +235,8 @@ flowchart LR
   the task/method pairs it supports.
 - `auto/model.py` owns pretrained path resolution, downloading, checksum policy,
   and missing-weight errors.
-- `utils/checkpoint.py` owns model-independent checkpoint loading and state-dict
-  extraction used by concrete model adapters.
+- `utils/model_load_checkpoint_state_dict.py` owns model-independent checkpoint
+  loading and state-dict extraction used by concrete model adapters.
 - `examples/<model>/` owns concrete model composition, model-specific layers,
   collators, feature graphs, forward/generate behavior, scripts, and checkpoint
   state adapters. Collators remain separate from model classes.

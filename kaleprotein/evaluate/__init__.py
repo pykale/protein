@@ -1,6 +1,6 @@
 """Reusable metrics, exposed as first-level metric modules."""
 
-from ._binary import MetricUndefinedError, flatten_numbers, validate_binary
+from kaleprotein.utils import MetricUndefinedError, validate_binary_inputs
 
 
 def compute_metrics(labels, probabilities, threshold=0.5):
@@ -11,9 +11,7 @@ def compute_metrics(labels, probabilities, threshold=0.5):
     from .f1 import f1_score
     from .threshold import optimal_f1_threshold
 
-    labels, probabilities = validate_binary(
-        flatten_numbers(labels), flatten_numbers(probabilities)
-    )
+    labels, probabilities = validate_binary_inputs(labels, probabilities)
     if threshold is None:
         threshold = optimal_f1_threshold(labels, probabilities)
     return {

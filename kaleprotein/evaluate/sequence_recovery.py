@@ -1,14 +1,13 @@
 """Sequence recovery for inverse-folding predictions."""
 
 from kaleprotein.auto.registry import EVALUATOR_REGISTRY
-
-from ._sequence import sequences_from
+from kaleprotein.utils import extract_sequences
 
 
 class SequenceRecovery:
     def __call__(self, outputs, data):
-        predicted = sequences_from(outputs)
-        native = sequences_from(data)
+        predicted = extract_sequences(outputs)
+        native = extract_sequences(data)
         if not predicted or not native:
             raise ValueError(
                 "Sequence recovery needs generated and native sequences."

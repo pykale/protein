@@ -1,27 +1,11 @@
-"""Shared sequence extraction for inverse-folding metrics."""
+"""Build residue targets for sequence-logit evaluation."""
 
 from kaleprotein.loaddata.records import AA_TO_INDEX
 
-
-def sequences_from(value):
-    if value is None:
-        return []
-    if isinstance(value, str):
-        return [value]
-    if isinstance(value, dict):
-        if "sequences" in value:
-            return list(value["sequences"])
-        if "sequence" in value:
-            return [value["sequence"]]
-    if isinstance(value, (list, tuple)):
-        result = []
-        for item in value:
-            result.extend(sequences_from(item))
-        return result
-    return []
+from .evaluate_extract_sequences import extract_sequences
 
 
-def targets_from(data, logits):
+def build_sequence_targets(data, logits):
     import torch
 
     if isinstance(data, dict):
@@ -35,7 +19,7 @@ def targets_from(data, logits):
             return x.argmax(dim=-1) if x.ndim == logits.ndim else x.long()
     if hasattr(data, "label"):
         return data.label.to(logits.device)
-    native = sequences_from(data)
+    native = extract_sequences(data)
     if native:
         encoded = [
             [AA_TO_INDEX.get(aa, 0) for aa in sequence]
@@ -63,4 +47,4 @@ def targets_from(data, logits):
     )
 
 
-__all__ = ["sequences_from", "targets_from"]
+__all__ = ["build_sequence_targets"]

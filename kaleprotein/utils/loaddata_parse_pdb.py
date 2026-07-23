@@ -2,8 +2,12 @@
 
 from pathlib import Path
 
-from .files import require_file
-from .structure import BACKBONE_ATOMS, THREE_TO_ONE, make_backbone_record
+from .loaddata_make_backbone_record import (
+    BACKBONE_ATOMS,
+    THREE_TO_ONE,
+    make_backbone_record,
+)
+from .loaddata_require_file import require_file
 
 
 def parse_pdb(path, *, chain=None):

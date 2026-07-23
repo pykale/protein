@@ -12,11 +12,4 @@ def require_file(path, *, description="data file") -> Path:
     return path
 
 
-def safe_path_part(value, *, name="path component") -> str:
-    text = str(value).strip()
-    if not text or Path(text).name != text or text in {".", ".."}:
-        raise ValueError(f"{name} must be a single safe path component; got {value!r}.")
-    return text
-
-
-__all__ = ["require_file", "safe_path_part"]
+__all__ = ["require_file"]

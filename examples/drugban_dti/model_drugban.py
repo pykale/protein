@@ -12,7 +12,7 @@ import torch
 from torch import nn
 
 from kaleprotein.auto import AutoProteinEmbedder, AutoProteinPredictor
-from kaleprotein.utils.checkpoint import load_checkpoint_state_dict
+from kaleprotein.utils import load_checkpoint_state_dict
 
 
 class DrugBANModel(nn.Module):

@@ -11,7 +11,7 @@ from torch import nn
 
 from kaleprotein.auto import AutoProteinEmbedder, AutoProteinPredictor
 from .data import DiffusionBatch
-from kaleprotein.utils.checkpoint import load_checkpoint_state_dict
+from kaleprotein.utils import load_checkpoint_state_dict
 
 from .configuration import MapDiffConfig
 from .diffusion import MapDiffDiffusion

@@ -1,17 +1,15 @@
 """Area under the receiver operating characteristic curve."""
 
 from kaleprotein.auto.registry import EVALUATOR_REGISTRY
-
-from ._binary import (
+from kaleprotein.utils import (
     MetricUndefinedError,
-    labels_from,
-    probabilities_from,
-    validate_binary,
+    extract_binary_inputs,
+    validate_binary_inputs,
 )
 
 
 def auroc_score(labels, probabilities):
-    labels, probabilities = validate_binary(labels, probabilities)
+    labels, probabilities = validate_binary_inputs(labels, probabilities)
     positive_count = sum(labels)
     negative_count = len(labels) - positive_count
     if positive_count == 0 or negative_count == 0:
@@ -38,7 +36,8 @@ def auroc_score(labels, probabilities):
 
 class AUROC:
     def __call__(self, outputs, data):
-        return auroc_score(labels_from(data), probabilities_from(outputs))
+        labels, probabilities = extract_binary_inputs(outputs, data)
+        return auroc_score(labels, probabilities)
 
 
 EVALUATOR_REGISTRY.register(("dti", "auroc"), AUROC)

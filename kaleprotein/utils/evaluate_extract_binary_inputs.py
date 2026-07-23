@@ -1,49 +1,50 @@
-"""Shared input handling for binary classification metrics."""
+"""Extract and validate binary-classification metric inputs."""
 
 import math
-
-import torch
-
 
 class MetricUndefinedError(ValueError):
     """Raised when a metric is not defined for the supplied labels."""
 
 
-def flatten_numbers(value):
-    if torch.is_tensor(value):
+def _flatten_numbers(value):
+    try:
+        import torch
+    except ImportError:
+        torch = None
+    if torch is not None and torch.is_tensor(value):
         return value.detach().cpu().flatten().tolist()
     if isinstance(value, dict):
         for key in ("probabilities", "labels", "label"):
             if key in value:
-                return flatten_numbers(value[key])
+                return _flatten_numbers(value[key])
         raise ValueError(
             f"Could not find probabilities or labels in keys {tuple(value)}"
         )
     if isinstance(value, (list, tuple)):
         flattened = []
         for item in value:
-            flattened.extend(flatten_numbers(item))
+            flattened.extend(_flatten_numbers(item))
         return flattened
     return [float(value)]
 
 
-def labels_from(data):
+def _labels_from(data):
     if isinstance(data, dict) and "label" in data:
-        return flatten_numbers(data["label"])
+        return _flatten_numbers(data["label"])
     if isinstance(data, (list, tuple)) and data and all(
         isinstance(item, dict) and "label" in item for item in data
     ):
         return [
             number
             for item in data
-            for number in flatten_numbers(item["label"])
+            for number in _flatten_numbers(item["label"])
         ]
-    return flatten_numbers(data)
+    return _flatten_numbers(data)
 
 
-def probabilities_from(outputs):
+def _probabilities_from(outputs):
     if isinstance(outputs, dict):
-        return flatten_numbers(outputs["probabilities"])
+        return _flatten_numbers(outputs["probabilities"])
     if (
         isinstance(outputs, (list, tuple))
         and outputs
@@ -52,14 +53,16 @@ def probabilities_from(outputs):
         return [
             number
             for item in outputs
-            for number in flatten_numbers(item["probabilities"])
+            for number in _flatten_numbers(item["probabilities"])
         ]
-    return flatten_numbers(outputs)
+    return _flatten_numbers(outputs)
 
 
-def validate_binary(labels, probabilities):
-    labels = [int(label) for label in labels]
-    probabilities = [float(probability) for probability in probabilities]
+def validate_binary_inputs(labels, probabilities):
+    labels = [int(label) for label in _flatten_numbers(labels)]
+    probabilities = [
+        float(probability) for probability in _flatten_numbers(probabilities)
+    ]
     if not labels:
         raise ValueError("Metrics require at least one example")
     if len(labels) != len(probabilities):
@@ -76,10 +79,16 @@ def validate_binary(labels, probabilities):
     return labels, probabilities
 
 
+def extract_binary_inputs(outputs, data):
+    """Return validated labels and probabilities from metric stage mappings."""
+    return validate_binary_inputs(
+        _labels_from(data),
+        _probabilities_from(outputs),
+    )
+
+
 __all__ = [
     "MetricUndefinedError",
-    "flatten_numbers",
-    "labels_from",
-    "probabilities_from",
-    "validate_binary",
+    "extract_binary_inputs",
+    "validate_binary_inputs",
 ]

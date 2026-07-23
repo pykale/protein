@@ -3,8 +3,7 @@
 import math
 
 from kaleprotein.auto.registry import EVALUATOR_REGISTRY
-
-from ._sequence import targets_from
+from kaleprotein.utils import build_sequence_targets
 
 
 class Perplexity:
@@ -17,7 +16,7 @@ class Perplexity:
                 "Perplexity requires logits in outputs['logits']."
             )
         logits = torch.as_tensor(logits).float()
-        targets = targets_from(data, logits).reshape(-1)
+        targets = build_sequence_targets(data, logits).reshape(-1)
         flat_logits = logits.reshape(-1, logits.shape[-1])
         usable = min(flat_logits.shape[0], targets.shape[0])
         targets = targets[:usable]

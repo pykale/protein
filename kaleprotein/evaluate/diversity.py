@@ -3,15 +3,14 @@
 from itertools import combinations
 
 from kaleprotein.auto.registry import EVALUATOR_REGISTRY
-
-from ._sequence import sequences_from
+from kaleprotein.utils import extract_sequences
 
 
 class Diversity:
     """Mean normalized pairwise Hamming distance among generated sequences."""
 
     def __call__(self, outputs, data=None):
-        sequences = sequences_from(outputs)
+        sequences = extract_sequences(outputs)
         if len(sequences) < 2:
             return 0.0
         distances = []
