@@ -7,10 +7,7 @@ import torch
 from kaleprotein.auto import AutoProteinConfig, AutoProteinModel, AutoProteinPreprocessor
 from examples.drugban_dti.collators import DrugBANCollator
 from examples.drugban_dti.model_drugban import DrugBANModel
-from kaleprotein.evaluate.tasks.dti.metrics import (
-    MetricUndefinedError,
-    compute_metrics,
-)
+from kaleprotein.evaluate import MetricUndefinedError, compute_metrics
 from kaleprotein.prepdata import molecule as processors
 
 

@@ -286,11 +286,9 @@ class MapDiffModel(nn.Module):
         perplexity_reference_sequences=None,
         **generation,
     ):
-        from kaleprotein.evaluate.tasks.inverse_folding.metrics import (
-            Diversity,
-            Perplexity,
-            SequenceRecovery,
-        )
+        from kaleprotein.evaluate.diversity import Diversity
+        from kaleprotein.evaluate.perplexity import Perplexity
+        from kaleprotein.evaluate.sequence_recovery import SequenceRecovery
 
         output = {"sequences": sequences, "logits": logits, **generation}
         metrics = {

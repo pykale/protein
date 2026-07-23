@@ -16,8 +16,9 @@ class MultiMetricEvaluator:
         self.config = config
         task = config["task"]
         metric_names = config.get("evaluation", {}).get("metrics", [])
-        if any(not EVALUATOR_REGISTRY.has((task, name)) for name in metric_names):
-            _import_task_metrics(task)
+        for name in metric_names:
+            if not EVALUATOR_REGISTRY.has((task, name)):
+                _import_metric(name)
         self.metrics = [(name, EVALUATOR_REGISTRY.get((task, name))()) for name in metric_names]
 
     def evaluate(self, outputs=None, data=None, labels=None, **prediction):
@@ -25,7 +26,10 @@ class MultiMetricEvaluator:
 
         if outputs is not None:
             if prediction:
-                raise TypeError("Pass evaluator outputs either as a mapping or as keyword fields, not both.")
+                raise TypeError(
+                    "Pass evaluator outputs either as a mapping or as keyword "
+                    "fields, not both."
+                )
             prediction = outputs
         if not isinstance(prediction, dict) or not prediction:
             raise ValueError("Evaluation requires a non-empty prediction mapping.")
@@ -46,12 +50,16 @@ class MultiMetricEvaluator:
     __call__ = evaluate
 
 
-def _import_task_metrics(task):
-    if not isinstance(task, str) or not task.isidentifier():
-        raise ValueError(f"Task names used for Auto discovery must be identifiers; got {task!r}.")
+def _import_metric(metric_name):
+    if not isinstance(metric_name, str) or not metric_name.isidentifier():
+        raise ValueError(
+            "Metric names used for Auto discovery must be identifiers; "
+            f"got {metric_name!r}."
+        )
+    module_name = f"kaleprotein.evaluate.{metric_name}"
     try:
-        importlib.import_module(f"kaleprotein.evaluate.tasks.{task}.metrics")
+        importlib.import_module(module_name)
     except ModuleNotFoundError as error:
-        if error.name == f"kaleprotein.evaluate.tasks.{task}":
+        if error.name == module_name:
             return
         raise

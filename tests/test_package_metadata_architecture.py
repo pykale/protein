@@ -78,14 +78,22 @@ def test_repository_uses_flat_verb_oriented_package_layers():
     assert (package / "model" / "embed" / "sequence_cnn.py").is_file()
     assert (package / "model" / "embed" / "molecule_gcn.py").is_file()
     assert (package / "model" / "predict" / "dti_ban.py").is_file()
-    assert (package / "evaluate" / "tasks" / "dti" / "metrics.py").is_file()
-    assert (
-        package
-        / "interpret"
-        / "tasks"
-        / "inverse_folding"
-        / "interpreters.py"
-    ).is_file()
+    for metric in (
+        "accuracy",
+        "auprc",
+        "auroc",
+        "diversity",
+        "f1",
+        "novelty",
+        "perplexity",
+        "sequence_recovery",
+        "threshold",
+    ):
+        assert (package / "evaluate" / f"{metric}.py").is_file()
+    for interpreter in ("bilinear_attention_map", "denoising_trajectory"):
+        assert (package / "interpret" / f"{interpreter}.py").is_file()
+    assert not (package / "evaluate" / "tasks").exists()
+    assert not (package / "interpret" / "tasks").exists()
     assert not any((package / "evaluate").rglob("interpreters.py"))
     assert (root / "examples" / "drugban_dti" / "model_drugban.py").is_file()
     assert (root / "examples" / "drugban_dti" / "collators.py").is_file()

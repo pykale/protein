@@ -42,8 +42,12 @@ kaleprotein/
   model/
     embed/                      # <modality>_<model>.py encoders
     predict/                    # <task>_<model>.py heads and generators
-  evaluate/tasks/               # quantitative task metrics
-  interpret/tasks/              # optional task interpretation
+  evaluate/                     # one quantitative metric per file
+    accuracy.py
+    sequence_recovery.py
+  interpret/                    # one interpretation method per file
+    bilinear_attention_map.py
+    denoising_trajectory.py
   utils/                        # parsers and generic checkpoint helpers
 examples/                       # complete named model implementations
   drugban_dti/

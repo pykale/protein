@@ -5,7 +5,9 @@ from collections.abc import Mapping
 from kaleprotein.auto.registry import INTERPRETER_REGISTRY
 
 
-@INTERPRETER_REGISTRY.register(("inverse_folding", "denoising_trajectory"))
+@INTERPRETER_REGISTRY.register(
+    ("inverse_folding", "denoising_trajectory")
+)
 class DenoisingTrajectoryInterpreter:
     def __init__(self, config=None):
         self.config = config
@@ -20,8 +22,8 @@ class DenoisingTrajectoryInterpreter:
         if output is not None:
             if generation or trajectory is not None or trajectories is not None:
                 raise TypeError(
-                    "Pass interpretation input either as output or keyword fields, "
-                    "not both."
+                    "Pass interpretation input either as output or keyword "
+                    "fields, not both."
                 )
             if not isinstance(output, Mapping):
                 raise TypeError("Interpretation output must be a mapping.")
@@ -32,15 +34,17 @@ class DenoisingTrajectoryInterpreter:
             trajectories = [trajectory] if trajectory else []
         if not trajectories:
             raise ValueError(
-                "No denoising trajectory is available; run an iterative sampler "
-                "first."
+                "No denoising trajectory is available; run an iterative "
+                "sampler first."
             )
 
         interpreted = [_interpret_trajectory(item) for item in trajectories]
         primary = interpreted[0]
         return {
             "trajectory": primary["trajectory"],
-            "trajectories": [item["trajectory"] for item in interpreted],
+            "trajectories": [
+                item["trajectory"] for item in interpreted
+            ],
             "steps": primary["steps"],
             "initial_sequences": [
                 sequence
@@ -57,7 +61,9 @@ class DenoisingTrajectoryInterpreter:
 
 def _interpret_trajectory(trajectory):
     if not trajectory:
-        raise ValueError("Denoising trajectories must contain at least one state.")
+        raise ValueError(
+            "Denoising trajectories must contain at least one state."
+        )
     interpreted = []
     previous = None
     for state in trajectory:

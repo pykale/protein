@@ -31,8 +31,8 @@ flowchart TB
         LOAD_DATA["loaddata/<br/>datasets + records"]
         PREP_DATA["prepdata/<br/>reusable transforms"]
         MODEL_COMPONENTS["model/<br/>embed + predict"]
-        EVALUATE["evaluate/<br/>task metrics"]
-        INTERPRET["interpret/<br/>task explanations"]
+        EVALUATE["evaluate/<br/>one metric per file"]
+        INTERPRET["interpret/<br/>one interpreter per file"]
         UTILS["utils/<br/>parsers + checkpoint helpers"]
       end
 
@@ -226,8 +226,10 @@ flowchart LR
 - `model/embed/` owns reusable modality and condition encoders.
 - `model/predict/` owns reusable fusion layers, heads, predictors, and
   generators.
-- `evaluate/tasks/` owns quantitative task metrics.
-- `interpret/tasks/` owns reusable task interpretation methods.
+- `evaluate/<metric>.py` owns one reusable quantitative metric and registers
+  the task/metric pairs it supports.
+- `interpret/<method>.py` owns one reusable interpretation method and registers
+  the task/method pairs it supports.
 - `auto/model.py` owns pretrained path resolution, downloading, checksum policy,
   and missing-weight errors.
 - `utils/checkpoint.py` owns model-independent checkpoint loading and state-dict

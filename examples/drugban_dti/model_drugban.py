@@ -68,7 +68,7 @@ class DrugBANModel(nn.Module):
         return self.predict(**self.embed(**inputs))
 
     def evaluate(self, *, probabilities, labels, threshold=0.5, **prediction):
-        from kaleprotein.evaluate.tasks.dti.metrics import compute_metrics
+        from kaleprotein.evaluate import compute_metrics
 
         return compute_metrics(labels, probabilities, threshold=threshold)
 
