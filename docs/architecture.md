@@ -78,6 +78,14 @@ Users normally construct one data composition and one complete model from the
 same model card:
 
 ```python
+from kaleprotein.auto import (
+    AutoProteinConfig,
+    AutoProteinDataLoader,
+    AutoProteinModel,
+)
+from examples.drugban_dti import register_model_card
+
+register_model_card()
 config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
 loader = AutoProteinDataLoader(
     "BindingDB/DTI",
@@ -248,7 +256,9 @@ Adding a new model normally adds one example directory and model card. A
 first-level reusable package changes only when the model introduces a genuinely
 reusable operation; Auto is not changed.
 
-In a source checkout, `kaleprotein` discovers cards from the adjacent
-`examples/` directory. Installed wheels do not include those examples; users or
-downstream packages register external model cards through
-`discover_model_cards(...)` or `register_model_card(...)`.
+`import kaleprotein` only reads package metadata. It does not initialize
+registries or inspect the repository. Built-in datasets and preprocessors
+register lazily when their Auto API is used. Model cards remain explicit:
+repository examples register their own card before a workflow starts, while
+users and downstream packages call `discover_model_cards(...)` or
+`register_model_card(...)`.

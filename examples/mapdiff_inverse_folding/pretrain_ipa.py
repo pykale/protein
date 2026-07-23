@@ -11,6 +11,7 @@ from kaleprotein.auto import (
     AutoProteinModel,
 )
 from kaleprotein.utils import move_to_device
+from examples.mapdiff_inverse_folding import register_model_card
 from examples.mapdiff_inverse_folding.collators import MapDiffIPACollator
 
 
@@ -29,6 +30,7 @@ def build_parser():
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    register_model_card()
     torch.manual_seed(args.seed)
 
     # 1. Load, preprocess, collate, and batch protein structures.

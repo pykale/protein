@@ -83,8 +83,6 @@ class AutoProteinConfig:
 
     @classmethod
     def from_pretrained(cls, model_id):
-        import kaleprotein  # noqa: F401 bootstrap registrations
-
         from kaleprotein.auto.registry import MODEL_CARD_REGISTRY
 
         return cls.from_yaml(MODEL_CARD_REGISTRY.get(model_id))

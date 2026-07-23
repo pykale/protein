@@ -78,15 +78,16 @@ base package can load externally registered model cards and DTI CSV data without
 importing PyTorch. DrugBAN raw-SMILES processing requires RDKit; MapDiff requires
 PyTorch.
 
-When running from a source checkout, `import kaleprotein` discovers model cards
-under the adjacent `examples/` directory. After installing a wheel, register a
-model card directory explicitly before using a named example model:
+`import kaleprotein` only exposes package metadata and never scans the
+filesystem. Register a model card explicitly before using its named model id:
 
 ```python
 from kaleprotein.auto.registry import discover_model_cards
 
 discover_model_cards("path/to/model_cards")
 ```
+
+The runnable repository examples register their own card before executing.
 
 ## DrugBAN
 
@@ -99,7 +100,9 @@ from kaleprotein.auto import (
     AutoProteinInterpreter,
     AutoProteinModel,
 )
+from examples.drugban_dti import register_model_card
 
+register_model_card()
 # 1. Select the model card shared by data and model composition.
 config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
 
@@ -199,7 +202,9 @@ from kaleprotein.auto import (
     AutoProteinInterpreter,
     AutoProteinModel,
 )
+from examples.mapdiff_inverse_folding import register_model_card
 
+register_model_card()
 # 1. Select one shared model configuration.
 config = AutoProteinConfig.from_pretrained("InverseFolding/MapDiff")
 

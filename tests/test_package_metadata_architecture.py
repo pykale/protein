@@ -3,6 +3,67 @@ import sys
 from pathlib import Path
 
 
+def test_version_has_one_packaged_source():
+    root = Path(__file__).resolve().parents[1]
+    version_file = root / "kaleprotein" / "_version.txt"
+    pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
+
+    import kaleprotein
+
+    expected = version_file.read_text(encoding="utf-8").strip()
+    assert expected
+    assert kaleprotein.__version__ == expected
+    assert 'dynamic = ["version"]' in pyproject
+    assert 'version = { file = ["kaleprotein/_version.txt"] }' in pyproject
+    assert '"_version.txt"' in pyproject
+
+
+def test_base_import_has_no_registry_or_example_discovery_side_effects():
+    root = Path(__file__).resolve().parents[1]
+    code = (
+        "import sys; "
+        f"sys.path.insert(0, {str(root)!r}); "
+        "import kaleprotein; "
+        "assert kaleprotein.__all__ == ['__version__']; "
+        "assert 'kaleprotein.auto' not in sys.modules; "
+        "assert 'kaleprotein.loaddata' not in sys.modules; "
+        "assert 'kaleprotein.prepdata' not in sys.modules"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-S", "-c", code],
+        cwd=root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_auto_registry_import_does_not_eagerly_import_pipeline_modules():
+    root = Path(__file__).resolve().parents[1]
+    code = (
+        "import sys; "
+        f"sys.path.insert(0, {str(root)!r}); "
+        "from kaleprotein.auto.registry import DATASET_REGISTRY; "
+        "assert DATASET_REGISTRY is not None; "
+        "assert 'kaleprotein.auto.model' not in sys.modules; "
+        "assert 'kaleprotein.loaddata' not in sys.modules; "
+        "assert 'kaleprotein.prepdata' not in sys.modules"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-S", "-c", code],
+        cwd=root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_pyproject_packages_only_kaleprotein():
     pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
     text = pyproject.read_text(encoding="utf-8")
@@ -55,6 +116,7 @@ def test_repository_uses_flat_verb_oriented_package_layers():
     assert (package / "auto" / "interpret.py").is_file()
     assert (package / "auto" / "config" / "model_config.py").is_file()
     assert (package / "auto" / "registry" / "base.py").is_file()
+    assert (package / "auto" / "registry" / "bootstrap.py").is_file()
     for legacy_auto_module in (
         "configuration.py",
         "data.py",

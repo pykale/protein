@@ -7,6 +7,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from kaleprotein.auto.registry import discover_model_cards
+
+discover_model_cards(ROOT / "examples")
+
 
 @pytest.fixture
 def fake_rdkit_graph(monkeypatch):

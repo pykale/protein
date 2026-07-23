@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 from urllib.request import urlretrieve
 
-from kaleprotein.utils import verify_checksum
+from kaleprotein.utils.model_verify_checksum import verify_checksum
 
 from .config import AutoProteinConfig, ComponentSpec
 from .registry import EMBEDDER_REGISTRY, PREDICTOR_REGISTRY
