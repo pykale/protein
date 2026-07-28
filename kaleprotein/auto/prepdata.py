@@ -23,6 +23,10 @@ class AutoProteinPreprocessor:
 
     @classmethod
     def from_config(cls, config):
+        target = config.get("auto_map", {}).get("AutoProteinPreprocessor")
+        if target:
+            implementation = config.auto_class("AutoProteinPreprocessor")
+            return implementation(config=config)
         return MultiStreamPreprocessor(config)
 
     @classmethod

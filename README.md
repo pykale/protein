@@ -42,6 +42,7 @@ kaleprotein/
   model/
     embed/                      # <modality>_<model>.py encoders
     predict/                    # <task>_<model>.py heads and generators
+    layers/                     # reusable GNN and attention building blocks
   evaluate/                     # one quantitative metric per file
     accuracy.py
     sequence_recovery.py
@@ -50,6 +51,7 @@ kaleprotein/
     denoising_trajectory.py
   utils/                        # <step>_<helper_function>.py helpers
     loaddata_read_fasta.py
+    prepdata_build_residue_graph.py
     model_load_checkpoint_state_dict.py
     evaluate_extract_binary_inputs.py
 examples/                       # complete named model implementations
@@ -75,8 +77,9 @@ python -m pip install -e ".[drugban,mapdiff,dev]"
 Setuptools packages only `kaleprotein*`. Root-level `examples/`, `tests/`, and
 `docs/` are repository resources and are not installed into site-packages. The
 base package can load externally registered model cards and DTI CSV data without
-importing PyTorch. DrugBAN raw-SMILES processing requires RDKit; MapDiff requires
-PyTorch.
+importing PyTorch. DrugBAN raw-SMILES processing requires RDKit. The MapDiff
+extra installs PyTorch plus PyTorch Geometric so original processed CATH graph
+objects can be loaded; the refactored model runtime itself uses plain PyTorch.
 
 `import kaleprotein` only exposes package metadata and never scans the
 filesystem. Register a model card explicitly before using its named model id:
@@ -238,10 +241,10 @@ the card's local `weights/` directory, download the configured MapDiff v1.0.1
 weight only when absent, and invoke the model's checkpoint state adapter once.
 
 ```bash
-python -m examples.mapdiff_inverse_folding.pretrain_ipa \
-  /data/cath/train --output ipa.pt
-python -m examples.mapdiff_inverse_folding.train_diffusion \
-  /data/cath/train --checkpoint ipa.pt --output mapdiff.pt
+python -m examples.mapdiff_inverse_folding.train \
+  /data/cath/train --stage ipa --output ipa.pt
+python -m examples.mapdiff_inverse_folding.train \
+  /data/cath/train --stage diffusion --checkpoint ipa.pt --output mapdiff.pt
 python -m examples.mapdiff_inverse_folding.evaluate \
   /data/cath/test --pretrained
 python -m examples.mapdiff_inverse_folding.interpret \
@@ -249,6 +252,11 @@ python -m examples.mapdiff_inverse_folding.interpret \
 python -m examples.mapdiff_inverse_folding.generate \
   structure.pdb --pretrained --steps 100
 ```
+
+The MapDiff training entry point keeps the original IPA-then-diffusion
+objectives, Adam/OneCycleLR defaults, and generation-based diffusion
+validation while exposing both stages through the same named dictionary
+pipeline.
 
 See the [MapDiff example README](examples/mapdiff_inverse_folding/README.md).
 

@@ -142,6 +142,8 @@ def test_repository_uses_flat_verb_oriented_package_layers():
         "model_load_checkpoint_state_dict.py",
         "model_move_to_device.py",
         "model_verify_checksum.py",
+        "prepdata_build_residue_graph.py",
+        "prepdata_compute_backbone_geometry.py",
     }
     utils_dir = package / "utils"
     assert {
@@ -161,6 +163,15 @@ def test_repository_uses_flat_verb_oriented_package_layers():
     assert (package / "model" / "embed" / "sequence_cnn.py").is_file()
     assert (package / "model" / "embed" / "molecule_gcn.py").is_file()
     assert (package / "model" / "predict" / "dti_ban.py").is_file()
+    assert (
+        package / "model" / "layers" / "sparse_egnn.py"
+    ).is_file()
+    assert (
+        package
+        / "model"
+        / "layers"
+        / "invariant_point_attention.py"
+    ).is_file()
     for metric in (
         "accuracy",
         "auprc",
@@ -184,6 +195,12 @@ def test_repository_uses_flat_verb_oriented_package_layers():
     assert (root / "examples" / "drugban_dti" / "collators.py").is_file()
     assert (root / "examples" / "mapdiff_inverse_folding" / "model_mapdiff.py").is_file()
     assert (root / "examples" / "mapdiff_inverse_folding" / "collators.py").is_file()
+    assert (
+        root
+        / "examples"
+        / "mapdiff_inverse_folding"
+        / "prepdata_mapdiff.py"
+    ).is_file()
     assert not (root / "examples" / "_utils.py").exists()
     assert (root / "tests" / "test_registry.py").is_file()
     assert (root / "docs" / "architecture.md").is_file()

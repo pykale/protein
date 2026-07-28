@@ -1,0 +1,6 @@
+{
+  "architecture": "mapdiff-v1.0.1",
+  "source": "https://github.com/peizhenbai/MapDiff/releases/download/v1.0.1/mapdiff_weight.pt",
+  "tensor_count": 464,
+  "key_shape_sha256": "af3f8ce8b0fa7017a4e1ceca14ce9133a743289ec753d17483f43d11a1d2d2a3"
+}
