@@ -1,4 +1,4 @@
-"""Shared helpers for text structure parsers."""
+"""Build normalized backbone records for text structure parsers."""
 
 from kaleprotein.loaddata.records import StructureRecord
 

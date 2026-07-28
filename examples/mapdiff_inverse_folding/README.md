@@ -50,7 +50,9 @@ from kaleprotein.auto import (
     AutoProteinInterpreter,
     AutoProteinModel,
 )
+from examples.mapdiff_inverse_folding import register_model_card
 
+register_model_card()
 # 1. Load the model card shared by the data and model sides.
 config = AutoProteinConfig.from_pretrained("InverseFolding/MapDiff")
 

@@ -18,6 +18,7 @@ from kaleprotein.auto import (
     AutoProteinModel,
 )
 from kaleprotein.utils import move_to_device
+from examples.drugban_dti import register_model_card
 from examples.drugban_dti._cli import (
     add_data_arguments,
     print_json,
@@ -39,6 +40,7 @@ def build_parser():
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    register_model_card()
     seed_everything(args.seed)
     if bool(args.smiles) != bool(args.sequence):
         raise ValueError("--smiles and --sequence must be provided together")

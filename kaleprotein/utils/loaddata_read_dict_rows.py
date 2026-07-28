@@ -3,7 +3,7 @@
 import csv
 from pathlib import Path
 
-from .files import require_file
+from .loaddata_require_file import require_file
 
 
 def read_dict_rows(path, *, delimiter=",", encoding="utf-8"):

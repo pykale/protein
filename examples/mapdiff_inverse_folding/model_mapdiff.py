@@ -11,7 +11,7 @@ from torch import nn
 
 from kaleprotein.auto import AutoProteinEmbedder, AutoProteinPredictor
 from .data import DiffusionBatch
-from kaleprotein.utils.checkpoint import load_checkpoint_state_dict
+from kaleprotein.utils import load_checkpoint_state_dict
 
 from .configuration import MapDiffConfig
 from .diffusion import MapDiffDiffusion
@@ -286,11 +286,9 @@ class MapDiffModel(nn.Module):
         perplexity_reference_sequences=None,
         **generation,
     ):
-        from kaleprotein.evaluate.tasks.inverse_folding.metrics import (
-            Diversity,
-            Perplexity,
-            SequenceRecovery,
-        )
+        from kaleprotein.evaluate.diversity import Diversity
+        from kaleprotein.evaluate.perplexity import Perplexity
+        from kaleprotein.evaluate.sequence_recovery import SequenceRecovery
 
         output = {"sequences": sequences, "logits": logits, **generation}
         metrics = {

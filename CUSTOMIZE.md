@@ -177,7 +177,7 @@ The full model is the composition root and sole full-checkpoint owner:
 from torch import nn
 
 from kaleprotein.auto import AutoProteinEmbedder, AutoProteinPredictor
-from kaleprotein.utils.checkpoint import load_checkpoint_state_dict
+from kaleprotein.utils import load_checkpoint_state_dict
 
 
 class MyModel(nn.Module):
@@ -228,10 +228,11 @@ Never add model ids, model-name branches, or architecture tables to `auto/`.
 ## Checkpoints
 
 `AutoProteinModel` owns local-first resolution, optional checksum verification,
-and atomic downloads in `auto/model.py`. Use `utils/checkpoint.py` only for
-model-independent checkpoint extraction. Keep key conversion in the model card
-and require strict loading. Nested embedders and predictors should not
-independently resolve the complete model checkpoint.
+and atomic downloads in `auto/model.py`. Use
+`utils/model_load_checkpoint_state_dict.py` only for model-independent
+checkpoint extraction. Keep key conversion in the model card and require
+strict loading. Nested embedders and predictors should not independently
+resolve the complete model checkpoint.
 
 ## Scripts And Tests
 

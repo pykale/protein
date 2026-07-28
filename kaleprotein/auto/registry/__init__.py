@@ -1,6 +1,11 @@
 """Shared registries. Concrete model definitions live in model-card examples."""
 
 from .base import Registry
+from .bootstrap import (
+    register_builtin_components,
+    register_builtin_data,
+    register_builtin_preprocessors,
+)
 from .catalog import (
     DATASET_REGISTRY,
     EMBEDDER_REGISTRY,
@@ -21,5 +26,8 @@ __all__ = [
     "PREPROCESSOR_REGISTRY",
     "Registry",
     "discover_model_cards",
+    "register_builtin_components",
+    "register_builtin_data",
+    "register_builtin_preprocessors",
     "register_model_card",
 ]

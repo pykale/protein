@@ -12,21 +12,20 @@ class AutoProteinInterpreter:
         method = config["interpretation"]["method"]
         key = (task, method)
         if not INTERPRETER_REGISTRY.has(key):
-            _import_task_interpreters(task)
+            _import_interpreter(method)
         return INTERPRETER_REGISTRY.get(key)(config)
 
 
-def _import_task_interpreters(task):
-    if not isinstance(task, str) or not task.isidentifier():
+def _import_interpreter(method):
+    if not isinstance(method, str) or not method.isidentifier():
         raise ValueError(
-            "Task names used for Auto discovery must be identifiers; "
-            f"got {task!r}."
+            "Interpreter names used for Auto discovery must be identifiers; "
+            f"got {method!r}."
         )
+    module_name = f"kaleprotein.interpret.{method}"
     try:
-        importlib.import_module(
-            f"kaleprotein.interpret.tasks.{task}.interpreters"
-        )
+        importlib.import_module(module_name)
     except ModuleNotFoundError as error:
-        if error.name == f"kaleprotein.interpret.tasks.{task}":
+        if error.name == module_name:
             return
         raise

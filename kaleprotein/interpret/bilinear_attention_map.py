@@ -18,23 +18,29 @@ class BilinearAttentionMapInterpreter:
         if output is not None:
             if prediction:
                 raise TypeError(
-                    "Pass interpretation input either as output or keyword fields, "
-                    "not both."
+                    "Pass interpretation input either as output or keyword "
+                    "fields, not both."
                 )
             if not isinstance(output, Mapping):
                 raise TypeError("Interpretation output must be a mapping.")
             prediction = dict(output)
         if not prediction:
-            raise ValueError("Attention interpretation requires prediction fields.")
+            raise ValueError(
+                "Attention interpretation requires prediction fields."
+            )
 
         attention = prediction.get("attention")
         if not torch.is_tensor(attention):
             raise ValueError(
-                "Attention interpretation requires a single, consistently padded "
-                "tensor batch."
+                "Attention interpretation requires a single, consistently "
+                "padded tensor batch."
             )
-        drug_mask = torch.as_tensor(prediction["molecule_mask"], dtype=torch.bool)
-        protein_mask = torch.as_tensor(prediction["protein_mask"], dtype=torch.bool)
+        drug_mask = torch.as_tensor(
+            prediction["molecule_mask"], dtype=torch.bool
+        )
+        protein_mask = torch.as_tensor(
+            prediction["protein_mask"], dtype=torch.bool
+        )
         atom_symbols = prediction.get("molecule_atom_symbols") or [
             [] for _ in range(attention.shape[0])
         ]
@@ -65,10 +71,14 @@ class BilinearAttentionMapInterpreter:
             )
             normalized_maps.append(normalized)
             atom_scores = (
-                normalized.sum(dim=1) if normalized.numel() else torch.empty(0)
+                normalized.sum(dim=1)
+                if normalized.numel()
+                else torch.empty(0)
             )
             residue_scores = (
-                normalized.sum(dim=0) if normalized.numel() else torch.empty(0)
+                normalized.sum(dim=0)
+                if normalized.numel()
+                else torch.empty(0)
             )
             sequence = sequences[batch_index] or ""
             symbols = (
@@ -100,7 +110,9 @@ class BilinearAttentionMapInterpreter:
                                 if residue_index < len(sequence)
                                 else None
                             ),
-                            "attention": float(residue_scores[score_index]),
+                            "attention": float(
+                                residue_scores[score_index]
+                            ),
                         }
                         for score_index, residue_index in enumerate(
                             residue_indices.tolist()

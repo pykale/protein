@@ -20,7 +20,8 @@ load -> preprocess -> collate -> embed -> predict/generate -> evaluate or interp
 - `loaddata/`, `prepdata/`, `model/`, `evaluate/`, and `interpret/` are
   first-level reusable operation packages; `utils/` owns fundamental parsers.
 - Auto configuration, registries, and pretrained resolution live under `auto/`;
-  model-independent checkpoint parsing lives in `utils/checkpoint.py`.
+  model-independent checkpoint parsing lives in
+  `utils/model_load_checkpoint_state_dict.py`.
 - `examples/<model>/` contains concrete full-model assembly, model-specific
   layers, scripts, assets, and checkpoint adapters.
 - `AutoProteinModel` returns a complete model. Inside that class,

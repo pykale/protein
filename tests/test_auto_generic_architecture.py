@@ -95,11 +95,12 @@ def test_registered_preprocessor_alias_and_canonical_id():
     assert canonical.featurize({"payload": 4}) == {"value": 4, "marker": "canonical"}
 
 
-def test_builtin_cards_are_discovered_without_importing_model_modules():
+def test_example_cards_are_explicitly_registered_without_importing_model_modules():
     import kaleprotein
 
     source = Path(kaleprotein.__file__).read_text(encoding="utf-8")
-    assert ".examples" not in source
+    assert "discover_model_cards" not in source
+    assert "register_builtin_components" not in source
     assert MODEL_CARD_REGISTRY.has("DTI/DrugBAN")
     assert MODEL_CARD_REGISTRY.has("InverseFolding/MapDiff")
 

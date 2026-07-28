@@ -31,9 +31,9 @@ flowchart TB
         LOAD_DATA["loaddata/<br/>datasets + records"]
         PREP_DATA["prepdata/<br/>reusable transforms"]
         MODEL_COMPONENTS["model/<br/>embed + predict"]
-        EVALUATE["evaluate/<br/>task metrics"]
-        INTERPRET["interpret/<br/>task explanations"]
-        UTILS["utils/<br/>parsers + checkpoint helpers"]
+        EVALUATE["evaluate/<br/>one metric per file"]
+        INTERPRET["interpret/<br/>one interpreter per file"]
+        UTILS["utils/<br/>&lt;step&gt;_&lt;helper&gt;.py"]
       end
 
       subgraph AUTO["auto: selection and construction"]
@@ -78,6 +78,14 @@ Users normally construct one data composition and one complete model from the
 same model card:
 
 ```python
+from kaleprotein.auto import (
+    AutoProteinConfig,
+    AutoProteinDataLoader,
+    AutoProteinModel,
+)
+from examples.drugban_dti import register_model_card
+
+register_model_card()
 config = AutoProteinConfig.from_pretrained("DTI/DrugBAN")
 loader = AutoProteinDataLoader(
     "BindingDB/DTI",
@@ -216,7 +224,10 @@ flowchart LR
   `model.py`, `evaluate.py`, and `interpret.py`. Dataset selection, collator
   selection, and batch loading share `loaddata.py` because they form one data
   pipeline.
-- `utils/` owns fundamental FASTA, tabular, PDB, mmCIF, and file parsing.
+- `utils/<step>_<helper_function>.py` owns stateless cross-component helpers.
+  The step prefix is one of `loaddata`, `prepdata`, `model`, `evaluate`, or
+  `interpret`; examples include `loaddata_parse_pdb.py`,
+  `model_move_to_device.py`, and `evaluate_extract_sequences.py`.
 - `loaddata/<dataset>.py` owns built-in adapters such as BindingDB, BioSNAP,
   Human, and CATH. Public ids use `Dataset/Task` order.
 - `loaddata/base_dataset.py` and `loaddata/records.py` own shared dataset classes
@@ -226,12 +237,14 @@ flowchart LR
 - `model/embed/` owns reusable modality and condition encoders.
 - `model/predict/` owns reusable fusion layers, heads, predictors, and
   generators.
-- `evaluate/tasks/` owns quantitative task metrics.
-- `interpret/tasks/` owns reusable task interpretation methods.
+- `evaluate/<metric>.py` owns one reusable quantitative metric and registers
+  the task/metric pairs it supports.
+- `interpret/<method>.py` owns one reusable interpretation method and registers
+  the task/method pairs it supports.
 - `auto/model.py` owns pretrained path resolution, downloading, checksum policy,
   and missing-weight errors.
-- `utils/checkpoint.py` owns model-independent checkpoint loading and state-dict
-  extraction used by concrete model adapters.
+- `utils/model_load_checkpoint_state_dict.py` owns model-independent checkpoint
+  loading and state-dict extraction used by concrete model adapters.
 - `examples/<model>/` owns concrete model composition, model-specific layers,
   collators, feature graphs, forward/generate behavior, scripts, and checkpoint
   state adapters. Collators remain separate from model classes.
@@ -243,7 +256,9 @@ Adding a new model normally adds one example directory and model card. A
 first-level reusable package changes only when the model introduces a genuinely
 reusable operation; Auto is not changed.
 
-In a source checkout, `kaleprotein` discovers cards from the adjacent
-`examples/` directory. Installed wheels do not include those examples; users or
-downstream packages register external model cards through
-`discover_model_cards(...)` or `register_model_card(...)`.
+`import kaleprotein` only reads package metadata. It does not initialize
+registries or inspect the repository. Built-in datasets and preprocessors
+register lazily when their Auto API is used. Model cards remain explicit:
+repository examples register their own card before a workflow starts, while
+users and downstream packages call `discover_model_cards(...)` or
+`register_model_card(...)`.

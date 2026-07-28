@@ -3,11 +3,11 @@
 import importlib
 from collections.abc import Mapping
 
-import kaleprotein  # noqa: F401 - bootstrap lightweight registrations
-from .registry import PREPROCESSOR_REGISTRY
+from .registry import PREPROCESSOR_REGISTRY, register_builtin_preprocessors
 
 
 def _load_preprocessor(preprocessor_id):
+    register_builtin_preprocessors()
     if not PREPROCESSOR_REGISTRY.has(preprocessor_id):
         namespace = preprocessor_id.partition("/")[0].casefold()
         if namespace in {"sequence", "molecule", "structure"}:

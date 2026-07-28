@@ -51,5 +51,8 @@ def test_auto_interpretation_does_not_import_evaluation_dispatch():
     ).read_text(encoding="utf-8")
 
     assert "from .evaluation" not in interpretation_source
-    assert "kaleprotein.interpret.tasks" in interpretation_source
+    assert "kaleprotein.interpret.{method}" in interpretation_source
+    assert "kaleprotein.interpret.tasks" not in interpretation_source
+    assert "kaleprotein.evaluate.{metric_name}" in evaluation_source
+    assert "kaleprotein.evaluate.tasks" not in evaluation_source
     assert "INTERPRETER_REGISTRY" not in evaluation_source

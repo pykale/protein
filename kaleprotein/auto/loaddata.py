@@ -7,9 +7,9 @@ class AutoProteinData:
     """Load a reusable dataset by its ``Dataset/Task`` identifier."""
 
     def __new__(cls, data_id, *args, **kwargs):
-        import kaleprotein  # noqa: F401 - bootstrap dataset registrations
-        from .registry import DATASET_REGISTRY
+        from .registry import DATASET_REGISTRY, register_builtin_data
 
+        register_builtin_data()
         _validate_data_id(data_id)
         loader = DATASET_REGISTRY.get(data_id)
         if not callable(loader):

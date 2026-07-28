@@ -1,4 +1,4 @@
-"""Device helpers for nested tensor containers."""
+"""Move nested model inputs and outputs between devices."""
 
 from collections.abc import Mapping
 

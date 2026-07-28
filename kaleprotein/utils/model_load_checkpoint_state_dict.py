@@ -1,7 +1,6 @@
 """Model-independent checkpoint parsing and integrity helpers."""
 
 from collections.abc import Mapping
-from hashlib import sha256
 from pathlib import Path
 
 
@@ -55,24 +54,6 @@ def extract_checkpoint_state_dict(checkpoint):
     return state_dict
 
 
-def verify_checksum(path, expected):
-    """Verify an optional SHA-256 digest for a checkpoint file."""
-    if not expected:
-        return
-    if not isinstance(expected, str):
-        raise TypeError("Checkpoint sha256 must be a hexadecimal string.")
-
-    digest = sha256()
-    with Path(path).open("rb") as checkpoint_file:
-        for chunk in iter(lambda: checkpoint_file.read(1024 * 1024), b""):
-            digest.update(chunk)
-    actual = digest.hexdigest()
-    if actual.casefold() != expected.casefold():
-        raise ValueError(
-            f"Checksum mismatch for {path}: expected {expected}, got {actual}"
-        )
-
-
 def _torch_checkpoint_loader(path, *, map_location):
     try:
         import torch
@@ -87,5 +68,4 @@ def _torch_checkpoint_loader(path, *, map_location):
 __all__ = [
     "extract_checkpoint_state_dict",
     "load_checkpoint_state_dict",
-    "verify_checksum",
 ]

@@ -10,10 +10,10 @@ from examples.mapdiff_inverse_folding.model_mapdiff import MapDiffModel
 from examples.mapdiff_inverse_folding.upstream_compat import UpstreamMapDiff
 from examples.mapdiff_inverse_folding.collators import CollatorDiff, CollatorIPAPretrain
 from examples.mapdiff_inverse_folding.data import build_residue_graph
-from kaleprotein.evaluate.tasks.inverse_folding.metrics import Diversity, Perplexity, SequenceRecovery
-from kaleprotein.interpret.tasks.inverse_folding.interpreters import (
-    DenoisingTrajectoryInterpreter,
-)
+from kaleprotein.evaluate.diversity import Diversity
+from kaleprotein.evaluate.perplexity import Perplexity
+from kaleprotein.evaluate.sequence_recovery import SequenceRecovery
+from kaleprotein.interpret.denoising_trajectory import DenoisingTrajectoryInterpreter
 from kaleprotein.loaddata.cath import CATHDataset
 from kaleprotein.prepdata.structure import BackboneCoordinateProcessor
 
