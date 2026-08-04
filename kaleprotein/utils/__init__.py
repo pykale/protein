@@ -12,6 +12,30 @@ _IMPORT_STRUCTURE = {
         ".evaluate_build_sequence_targets",
         "build_sequence_targets",
     ),
+    "build_residue_graph": (
+        ".prepdata_build_residue_graph",
+        "build_residue_graph",
+    ),
+    "compute_backbone_angle_features": (
+        ".prepdata_compute_backbone_geometry",
+        "compute_backbone_angle_features",
+    ),
+    "compute_backbone_frames": (
+        ".prepdata_compute_backbone_geometry",
+        "compute_backbone_frames",
+    ),
+    "compute_dihedral": (
+        ".prepdata_compute_backbone_geometry",
+        "compute_dihedral",
+    ),
+    "compute_edge_orientations": (
+        ".prepdata_compute_backbone_geometry",
+        "compute_edge_orientations",
+    ),
+    "compute_neighbor_direction_features": (
+        ".prepdata_compute_backbone_geometry",
+        "compute_neighbor_direction_features",
+    ),
     "extract_binary_inputs": (
         ".evaluate_extract_binary_inputs",
         "extract_binary_inputs",
@@ -28,6 +52,10 @@ _IMPORT_STRUCTURE = {
     "move_to_device": (".model_move_to_device", "move_to_device"),
     "parse_mmcif": (".loaddata_parse_mmcif", "parse_mmcif"),
     "parse_pdb": (".loaddata_parse_pdb", "parse_pdb"),
+    "place_virtual_cb": (
+        ".prepdata_compute_backbone_geometry",
+        "place_virtual_cb",
+    ),
     "read_csv": (".loaddata_read_dict_rows", "read_csv"),
     "read_dict_rows": (".loaddata_read_dict_rows", "read_dict_rows"),
     "read_fasta": (".loaddata_read_fasta", "read_fasta"),

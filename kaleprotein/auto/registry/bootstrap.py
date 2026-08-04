@@ -1,13 +1,15 @@
 """Lazy registration of reusable components shipped with KaleProtein."""
 
 from functools import lru_cache
+from importlib import import_module
 
 
 @lru_cache(maxsize=1)
 def register_builtin_data():
     """Import built-in dataset modules exactly once."""
 
-    from kaleprotein import loaddata as _loaddata  # noqa: F401
+    for module_name in ("bindingdb", "biosnap", "cath", "human"):
+        import_module(f"kaleprotein.loaddata.{module_name}")
 
     return True
 

@@ -19,7 +19,11 @@ def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path, help="A PDB, processed .pt graph, or directory of graphs.")
     weights = parser.add_mutually_exclusive_group()
-    weights.add_argument("--checkpoint", type=Path, help="A local lightweight or upstream MapDiff checkpoint.")
+    weights.add_argument(
+        "--checkpoint",
+        type=Path,
+        help="A local full MapDiff checkpoint.",
+    )
     weights.add_argument("--pretrained", action="store_true", help="Resolve and strictly load the configured v1.0.1 release.")
     parser.add_argument("--steps", type=int, default=50)
     parser.add_argument("--method", choices=("ddim", "ddpm"), default="ddim")
@@ -79,6 +83,9 @@ def main(argv=None):
     serializable = {
         "sequences": generation["sequences"],
         "trajectory": generation["trajectory"],
+        "trajectories": generation["trajectories"],
+        "sample_ids": generation["sample_ids"],
+        "reference_sequences": generation["reference_sequences"],
     }
     text = json.dumps(serializable, indent=2)
     if args.output:

@@ -1,33 +1,28 @@
 # MapDiff Inverse Folding
 
-This model card contains a self-contained PyTorch MapDiff refactor. It supports
-both the published v1.0.1 checkpoint layout and a smaller architecture for
-local training and tests, without importing the upstream checkout at runtime.
+This card is a self-contained refactor of the complete MapDiff v1.0.1
+architecture and workflow. It does not import a MapDiff checkout at runtime and
+does not contain a toy or fallback network.
 
-## Card Layout
+## Layout
 
 ```text
 mapdiff_inverse_folding/
   config.yaml
   configuration.py
+  prepdata_mapdiff.py
   collators.py
-  data.py
   model_mapdiff.py
-  egnn.py
-  ipa.py
-  diffusion.py
-  upstream_compat.py
-  pretrain_ipa.py
-  train_diffusion.py
+  train.py
   evaluate.py
-  interpret.py
   generate.py
+  interpret.py
   maps/
   data/
   weights/
 ```
 
-The complete model contains two registered roles:
+The example composes two registered model roles:
 
 ```text
 MapDiffModel
@@ -35,13 +30,13 @@ MapDiffModel
   AutoProteinPredictor("inverse_folding/mapdiff_generator")
 ```
 
-The predictor is the diffusion generator and owns the learned denoising
-network. The embedder is a non-owning condition-encoding view, so parameters
-and checkpoint keys are not duplicated. `AutoProteinModel` resolves and loads
-the requested full checkpoint once; `MapDiffModel` only adapts checkpoint state
-to the selected parameter tree.
+The generator owns the full IPA prior, EGNN denoiser, categorical noise
+schedule, training objectives, and iterative sampler. The embedder is a
+non-owning condition-encoder view, so parameters and checkpoint keys are not
+duplicated. Reusable sparse EGNN and invariant point attention layers live in
+`kaleprotein.model.layers`; MapDiff-specific assembly remains here.
 
-## Evaluation, Generation, And Interpretation Pipeline
+## Pipeline
 
 ```python
 from kaleprotein.auto import (
@@ -53,10 +48,11 @@ from kaleprotein.auto import (
 from examples.mapdiff_inverse_folding import register_model_card
 
 register_model_card()
-# 1. Load the model card shared by the data and model sides.
+
+# 1. Load one model card for the data and model sides.
 config = AutoProteinConfig.from_pretrained("InverseFolding/MapDiff")
 
-# 2. Load, preprocess, collate, and batch inverse-folding records.
+# 2. Load, preprocess, and batch a PDB, mmCIF, or processed CATH file.
 loader = AutoProteinDataLoader(
     "CATH/InverseFolding",
     config=config,
@@ -65,13 +61,13 @@ loader = AutoProteinDataLoader(
 )
 inputs = next(iter(loader))
 
-# 3. Build the complete model and resolve its pretrained checkpoint.
+# 3. Build the complete model and resolve the release checkpoint.
 model = AutoProteinModel.from_config(config, pretrain=True)
 
-# 4. Encode structure conditions from the loader mapping.
+# 4. Encode the named structural conditions.
 embeddings = model.embed(**inputs)
 
-# 5. Generate from the named embedding mapping.
+# 5. Generate inverse-folded sequences.
 generation = model.generate(
     **embeddings,
     steps=100,
@@ -79,86 +75,143 @@ generation = model.generate(
     num_samples=1,
 )
 
-# 6a. Evaluate the generation mapping.
+# 6a. Evaluate the generated mapping.
 metrics = model.evaluate(**generation)
 
-# 6b. Independently interpret its denoising trajectory when needed.
-interpretation = AutoProteinInterpreter.from_config(config).explain(**generation)
+# 6b. Interpret the same mapping independently when needed.
+interpretation = AutoProteinInterpreter.from_config(config).explain(
+    **generation
+)
 ```
 
-Generation returns sequences, logits, token ids, and a non-empty denoising
-trajectory. It also carries `reference_sequences` from the condition mapping,
-so generation metrics can consume the dictionary directly.
+Every boundary is a normal dictionary. `model.embed(**inputs)` returns named
+fields including `structure_embedding`, `edge_embedding`, and
+`ipa_pair_embedding`; `model.generate(**embeddings)` returns sequences, logits,
+token ids, references, and denoising trajectories.
 
-The loader does not invoke MapDiff. It only guarantees that each yielded
-mapping can enter `model.embed(**inputs)` directly.
+## Data Responsibilities
 
-## Architectures
+`AutoProteinDataLoader` composes two independent card classes:
 
-- `upstream-mapdiff-v1` matches the published v1.0.1 parameter tree under
-  `model`, `prior_model`, and `noise_schedule`.
-- `kale-mapdiff-v1` is a smaller real EGNN, IPA, and categorical-diffusion
-  implementation used for local training and tests.
+- `MapDiffPreprocessor` handles one structure at a time. It constructs the
+  release-compatible 31-channel residue input, 93-channel edge input, virtual
+  C-beta, secondary-structure input, and five-atom IPA view.
+- `MapDiffCollator` only batchizes prepared samples. It concatenates sparse
+  graphs, offsets edge indices, and pads IPA tensors.
 
-The release profile uses 31 node inputs, 93 edge inputs, 128 hidden channels,
-six EGNN layers, six IPA layers, 500 diffusion steps, and the packaged CATH
-marginal in `maps/train_marginal_x.json`.
+Reusable residue-neighbor and backbone-geometry functions live in
+`kaleprotein.utils` under `prepdata_*` filenames. Random IPA masking and
+categorical diffusion noise are training objectives, so the model applies them
+at each forward pass rather than freezing them during preprocessing.
 
-## Data Compatibility
+Processed CATH `.pt` records retain existing `x`, `extra_x`, `edge_attr`, `ss`,
+`mu_r_norm`, and five-atom coordinates and use them directly when available.
+Residues missing N, CA, or C are removed during per-sample preprocessing, with
+sequence, node features, and graph edges filtered and remapped together. For
+raw PDB/mmCIF inputs, geometry is computed from coordinates. The generic parser
+does not provide the normalized SASA, B-factor, or DSSP channels used to train
+the release model, so those unavailable channels are zero-filled.
 
-`CATHDataset` reads plain `.pt` structure dictionaries, directories, PDB files,
-and mmCIF files into model-independent structure records. MapDiff's example-local
-data layer then constructs residue graphs, paired IPA batches, the virtual C-beta,
-and the expected geometric channels.
+## Full Model
 
-Raw PDBs do not provide the normalized solvent-accessibility, B-factor, or DSSP
-channels used during upstream CATH training, so those channels are zero-filled.
-Processed CATH records are preferred for published-checkpoint quality.
+The single configured architecture matches the MapDiff v1.0.1 parameter tree:
 
-## Workflows
+```text
+model.*          # six-layer EGNN denoiser
+prior_model.*    # six-layer IPA masking prior
+noise_schedule.* # 500-step categorical schedule
+```
+
+The release profile uses 128 hidden channels, 31 node inputs, 93 edge inputs,
+four IPA heads, and the CATH marginal stored in
+`maps/train_marginal_x.json`. The compact
+`maps/release_state_manifest.json` records the official 464-tensor key/shape
+contract, so smoke tests can detect parameter-tree drift without downloading
+the large checkpoint. Tests may reduce dimensions and depth for workflow
+execution, but they instantiate this same implementation rather than another
+model.
+
+## Training
+
+MapDiff retains its original two-stage objectives and release optimization
+settings through one entry point:
 
 ```bash
 python -m pip install -e ".[mapdiff]"
 
-python -m examples.mapdiff_inverse_folding.pretrain_ipa \
-  /data/cath/train --output ipa.pt
+python -m examples.mapdiff_inverse_folding.train \
+  /data/cath/train \
+  --stage ipa \
+  --validation-data /data/cath/validation \
+  --output ipa.pt
 
-python -m examples.mapdiff_inverse_folding.train_diffusion \
-  /data/cath/train --checkpoint ipa.pt --output mapdiff.pt
+python -m examples.mapdiff_inverse_folding.train \
+  /data/cath/train \
+  --stage diffusion \
+  --validation-data /data/cath/validation \
+  --checkpoint ipa.pt \
+  --output mapdiff.pt
+```
 
+The `mapdiff` extra includes PyTorch Geometric because official processed CATH
+`.pt` files serialize `torch_geometric.data.Data` objects. PyTorch Geometric is
+only needed to deserialize those source files; the refactored model and
+collator operate on ordinary tensors and dictionaries.
+
+Without command-line overrides, IPA pretraining runs for 200 epochs and
+diffusion training for 100 epochs. Both use Adam with `lr=5e-4`,
+`betas=(0.95, 0.999)`, gradient clipping, and OneCycleLR, matching the release
+training configuration. `--epochs`, `--learning-rate`, `--no-scheduler`, and
+the other flags remain available for controlled runs.
+
+Both stages execute the visible pipeline:
+
+```python
+inputs = next(iter(loader))
+embeddings = model.embed(**inputs)
+prediction = model.predict(**embeddings)
+loss = prediction["loss"]
+```
+
+The IPA stage optimizes `prior_model`; the diffusion stage optimizes the full
+model. With `--validation-data`, IPA selects the lowest masking loss while
+diffusion performs iterative generation and selects the highest sequence
+recovery, using perplexity as the tie-breaker. Both save complete checkpoints
+that `AutoProteinModel` can restore.
+
+## Evaluation And Generation
+
+```bash
 python -m examples.mapdiff_inverse_folding.evaluate \
-  /data/cath/test --pretrained
+  /data/cath/test --pretrained --steps 100
+
+python -m examples.mapdiff_inverse_folding.generate \
+  structure.pdb --pretrained --steps 100 --output generated.json
 
 python -m examples.mapdiff_inverse_folding.interpret \
   structure.pdb --pretrained --steps 100
-
-python -m examples.mapdiff_inverse_folding.generate \
-  structure.pdb --pretrained --steps 100
 ```
 
-- `pretrain_ipa.py` trains the masking prior and saves a complete model checkpoint.
-- `train_diffusion.py` trains the full lightweight diffusion model.
-- `evaluate.py` reports sequence recovery, perplexity, and diversity.
-- `interpret.py` independently reports changes along the denoising trajectory.
-- `generate.py` preprocesses a structure and samples sequences.
+Evaluation reports sequence recovery, perplexity, and diversity. Interpretation
+is separate and summarizes residue changes along the denoising trajectory.
 
 ## Pretrained Weights
 
-`pretrain=True` checks `weights/mapdiff_weight.pt` and otherwise atomically
-downloads the configured release:
+`pretrain=True` first checks `weights/mapdiff_weight.pt`. If absent, Auto
+atomically downloads the configured v1.0.1 release:
 
 ```text
 https://github.com/peizhenbai/MapDiff/releases/download/v1.0.1/mapdiff_weight.pt
 ```
 
-The card detects lightweight versus release parameter layouts and requires an
-exact state-key and tensor-shape match. It never falls back to `strict=False`.
+Checkpoint loading requires an exact key and tensor-shape match. It never uses
+`strict=False` and never switches to another architecture.
 
-## Dependencies And Attribution
+## Attribution
 
-Plain PDB and dictionary `.pt` inputs require PyTorch but not PyG,
-`torch_scatter`, OpenFold, Hydra, Biopython, DSSP, or `einops`.
-
-The architecture and adapted code derive from
-[peizhenbai/MapDiff](https://github.com/peizhenbai/MapDiff) under the MIT
-License. IPA-related attribution is listed in `THIRD_PARTY_NOTICES.md`.
+The architecture, data features, training objectives, and sampling procedure
+are refactored from
+[wenruifan/MapDiff](https://github.com/wenruifan/MapDiff) and the original
+[peizhenbai/MapDiff](https://github.com/peizhenbai/MapDiff), distributed under
+the MIT License. IPA-related attribution is listed in
+`THIRD_PARTY_NOTICES.md`.

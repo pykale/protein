@@ -20,6 +20,7 @@ drugban = [
 ]
 mapdiff = [
     "torch>=2.0",
+    "torch-geometric>=2.4",
 ]
 dev = [
     "build>=1.2",

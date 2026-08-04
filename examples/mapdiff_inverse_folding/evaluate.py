@@ -57,7 +57,7 @@ def main(argv=None):
     # 3. Embed structural conditions and generate sequences for every batch.
     sequences = []
     recovery_references = []
-    perplexity_references = []
+    sample_ids = []
     logits = []
     with torch.no_grad():
         for inputs in loader:
@@ -69,10 +69,9 @@ def main(argv=None):
                 method=args.method,
                 num_samples=args.num_samples,
             )
-            references = list(generation["reference_sequences"])
             sequences.extend(generation["sequences"])
-            recovery_references.extend(references * args.num_samples)
-            perplexity_references.extend(references)
+            recovery_references.extend(generation["reference_sequences"])
+            sample_ids.extend(generation["sample_ids"])
             if generation.get("logits") is not None:
                 logits.append(generation["logits"].detach().cpu())
     if not sequences:
@@ -82,7 +81,7 @@ def main(argv=None):
     collected = {
         "sequences": sequences,
         "reference_sequences": recovery_references,
-        "perplexity_reference_sequences": perplexity_references,
+        "sample_ids": sample_ids,
         "logits": torch.cat(logits) if logits else None,
     }
     metrics = model.evaluate(**collected)

@@ -9,6 +9,9 @@ from .records import AMINO_ACID_ALPHABET, StructureRecord
 from kaleprotein.utils import parse_mmcif, parse_pdb, require_file
 
 
+CATH_AMINO_ACID_ALPHABET = "ARNDCQEGHILKMFPSTWYV"
+
+
 @DATASET_REGISTRY.register("CATH/InverseFolding")
 class CATHDataset(Sequence[StructureRecord]):
     """Read processed tensors, PDB files, or mmCIF files as structure records."""
@@ -104,7 +107,8 @@ def _coerce_structure_record(item, *, path, index, torch):
         coords = get("coords")
     if coords is None:
         raise ValueError("record is missing atom_pos/backbone_coords/coords")
-    coords = torch.as_tensor(coords, dtype=torch.float32)
+    raw_coords = torch.as_tensor(coords, dtype=torch.float32)
+    coords = raw_coords
     if coords.ndim == 2 and coords.shape[-1] == 3:
         coords = coords[:, None, :]
     if coords.ndim != 3 or coords.shape[-1] != 3:
@@ -139,19 +143,48 @@ def _coerce_structure_record(item, *, path, index, torch):
     if not sequence and x is not None:
         tensor_x = torch.as_tensor(x)
         if tensor_x.ndim == 2 and tensor_x.shape[-1] >= len(AMINO_ACID_ALPHABET):
+            alphabet = str(
+                get("alphabet", CATH_AMINO_ACID_ALPHABET)
+            )
+            if len(alphabet) != len(AMINO_ACID_ALPHABET):
+                raise ValueError(
+                    "record alphabet must contain exactly 20 amino acids"
+                )
             sequence = "".join(
-                AMINO_ACID_ALPHABET[position]
+                alphabet[position]
                 for position in tensor_x[:, :20].argmax(dim=-1).tolist()
             )
     identifier = (
         get("identifier") or get("id") or get("name") or f"{Path(path).stem}:{index}"
     )
+    metadata = dict(get("metadata", {}) or {})
+    metadata.update(
+        {
+            "source_path": str(path),
+            "item_index": index,
+        }
+    )
+    for key in (
+        "x",
+        "extra_x",
+        "pos",
+        "edge_index",
+        "edge_attr",
+        "ss",
+        "mu_r_norm",
+    ):
+        value = get(key)
+        if value is not None:
+            metadata[key] = value
+    if raw_coords.shape[1] >= 5:
+        metadata["atom_pos"] = raw_coords
+
     return StructureRecord(
         atom_pos=coords,
         atom_mask=atom_mask,
         sequence=sequence[: coords.shape[0]],
         identifier=str(identifier),
-        metadata={"source_path": str(path), "item_index": index},
+        metadata=metadata,
     )
 
 

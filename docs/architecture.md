@@ -15,6 +15,7 @@ kaleprotein/
   model/
     embed/
     predict/
+    layers/
   evaluate/
   interpret/
   utils/
@@ -180,11 +181,12 @@ match.
 Auto requires mappings at these boundaries, but it does not prescribe one
 universal tensor schema. The concrete model card owns meaningful names. For
 example, DrugBAN uses `protein_embedding` and `molecule_embedding`, while
-MapDiff uses `structure_embedding`, `conditioning`, and `batch`. Predictors and
-generators declare the fields they consume and accept unrelated metadata with
-`**kwargs` when it should flow to a later stage. This lets users replace or
-insert components using normal Python APIs instead of adapting positional
-tuples or framework-specific workflow containers.
+MapDiff uses `structure_embedding`, `edge_embedding`, and
+`ipa_pair_embedding`. Predictors and generators declare the fields they consume
+and accept unrelated metadata with `**kwargs` when it should flow to a later
+stage. This lets users replace or insert components using normal Python APIs
+instead of adapting positional tuples or framework-specific workflow
+containers.
 
 Concrete model classes never create datasets, preprocessors, collators, or
 data loaders. They receive already-collated tensor mappings. The Auto data
@@ -209,8 +211,8 @@ MapDiff:
 
 ```mermaid
 flowchart LR
-    INPUT["CATH graph / PDB"] --> PREP["backbone preprocessing"]
-    PREP --> COLLATE["sparse graph + padded IPA batch"]
+    INPUT["CATH graph / PDB"] --> PREP["single-structure MapDiff features"]
+    PREP --> COLLATE["concatenate, offset, and pad only"]
     COLLATE --> CONDITION["structure condition encoding"]
     CONDITION --> GENERATE["iterative diffusion generator"]
     GENERATE --> METRICS["recovery / perplexity / diversity"]
@@ -237,6 +239,9 @@ flowchart LR
 - `model/embed/` owns reusable modality and condition encoders.
 - `model/predict/` owns reusable fusion layers, heads, predictors, and
   generators.
+- `model/layers/` owns genuinely reusable neural building blocks such as sparse
+  EGNN and invariant point attention layers; complete named architectures
+  remain in examples.
 - `evaluate/<metric>.py` owns one reusable quantitative metric and registers
   the task/metric pairs it supports.
 - `interpret/<method>.py` owns one reusable interpretation method and registers
@@ -245,9 +250,10 @@ flowchart LR
   and missing-weight errors.
 - `utils/model_load_checkpoint_state_dict.py` owns model-independent checkpoint
   loading and state-dict extraction used by concrete model adapters.
-- `examples/<model>/` owns concrete model composition, model-specific layers,
-  collators, feature graphs, forward/generate behavior, scripts, and checkpoint
-  state adapters. Collators remain separate from model classes.
+- `examples/<model>/` owns concrete model composition, model-specific feature
+  schemas, forward/generate behavior, scripts, and checkpoint state adapters.
+  A custom preprocessor may be selected through `auto_map`; collators only
+  batchize already-prepared samples and remain separate from model classes.
 - `AutoProteinModel` owns full-model checkpoint resolution, optional download,
   and the single call into the concrete model's `load_checkpoint()` adapter.
   Nested components never resolve or download that checkpoint again.

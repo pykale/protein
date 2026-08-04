@@ -85,10 +85,7 @@ def test_all_workflows_keep_embedder_and_predictor_stages_explicit():
         "examples/drugban_dti/evaluate.py": "model.predict(**embeddings)",
         "examples/drugban_dti/predict.py": "model.predict(**embeddings)",
         "examples/drugban_dti/interpret.py": "model.predict(**embeddings)",
-        "examples/mapdiff_inverse_folding/pretrain_ipa.py": (
-            "model.predict(**embeddings)"
-        ),
-        "examples/mapdiff_inverse_folding/train_diffusion.py": (
+        "examples/mapdiff_inverse_folding/train.py": (
             "model.predict(**embeddings)"
         ),
         "examples/mapdiff_inverse_folding/evaluate.py": (
@@ -235,7 +232,24 @@ def test_mapdiff_direct_generative_pipeline_style(tmp_path):
         },
         tmp_path / "protein.pt",
     )
-    config = AutoProteinConfig.from_pretrained("InverseFolding/MapDiff")
+    config_data = AutoProteinConfig.from_pretrained(
+        "InverseFolding/MapDiff"
+    ).to_dict()
+    config_data["model"].update(
+        {
+            "hidden_dim": 16,
+            "egnn_depth": 1,
+            "ipa_depth": 1,
+            "ipa_heads": 2,
+            "qk_points": 2,
+            "v_points": 2,
+            "timesteps": 3,
+            "egnn_dropout": 0.0,
+            "ipa_dropout": 0.0,
+        }
+    )
+    config_data["model"].pop("marginal_map", None)
+    config = AutoProteinConfig.from_dict(config_data)
     loader = AutoProteinDataLoader(
         "CATH/InverseFolding",
         config=config,
