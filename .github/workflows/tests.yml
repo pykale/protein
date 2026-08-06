@@ -16,17 +16,19 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Install package and test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[drugban,mapdiff,dev]"
+          python -m pip install -e ".[dev]"
 
       - name: Run unit tests
         run: python -m pytest -q
@@ -34,29 +36,45 @@ jobs:
       - name: Byte-compile package
         run: python -m compileall -q kaleprotein
 
+  package:
+    name: Build and inspect distributions
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install packaging tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build twine
+
       - name: Build distributions
         run: python -m build
 
-      - name: Verify wheel package boundary
+      - name: Check distribution metadata and contents
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          from zipfile import ZipFile
+          python -m twine check --strict dist/*
+          python scripts/check_distribution.py dist
 
-          wheel = next(Path("dist").glob("*.whl"))
-          with ZipFile(wheel) as archive:
-              names = archive.namelist()
+      - name: Install the core wheel in isolation
+        run: |
+          python -m venv "$RUNNER_TEMP/kaleprotein-core"
+          "$RUNNER_TEMP/kaleprotein-core/bin/python" -m pip install --upgrade pip
+          "$RUNNER_TEMP/kaleprotein-core/bin/python" -m pip install dist/*.whl
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/kaleprotein-core/bin/python" - <<'PY'
+          import importlib.util
+          import kaleprotein
 
-          assert any(name.startswith("kaleprotein/") for name in names)
-          forbidden = (
-              "kale_protein/",
-              "examples/",
-              "tests/",
-              "kaleprotein/core/data/collators/",
-              "kaleprotein/core/data/datasets/",
-              "kaleprotein/core/data/modalities/",
-              "kaleprotein/core/data/preprocessors/",
-              "kaleprotein/core/data/tasks/",
-          )
-          assert not any(name.startswith(forbidden) for name in names), names
+          assert kaleprotein.__version__
+          assert importlib.util.find_spec("examples") is None
+          assert importlib.util.find_spec("torch") is None
           PY
