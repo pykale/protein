@@ -71,6 +71,8 @@ def test_pyproject_packages_only_kaleprotein():
     assert '[project.optional-dependencies]' in text
     assert "drugban = [" in text
     assert "mapdiff = [" in text
+    assert "examples = [" in text
+    assert "test = [" in text
     assert "dev = [" in text
     assert '"**/*.yaml"' in text
     assert '"**/*.map"' in text

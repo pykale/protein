@@ -68,18 +68,40 @@ and checkpoint compatibility stay in each example. See the
 
 ## Installation
 
+Install the lightweight library API from PyPI:
+
 ```bash
-python -m pip install -e ".[drugban]"
-python -m pip install -e ".[mapdiff]"
-python -m pip install -e ".[drugban,mapdiff,dev]"
+python -m pip install kaleprotein
+```
+
+Choose an extra when a workflow needs heavier model dependencies:
+
+| Install | Contents |
+| --- | --- |
+| `kaleprotein` | Auto APIs, data loading, preprocessing, metrics, and configuration |
+| `kaleprotein[drugban]` | Core plus PyTorch and RDKit |
+| `kaleprotein[mapdiff]` | Core plus PyTorch and PyTorch Geometric |
+| `kaleprotein[examples]` | Dependencies for every repository example |
+| `kaleprotein[test]` | Core plus the test runner and coverage support |
+| `kaleprotein[dev]` | Examples, tests, build, lint, and release tools |
+
+For example:
+
+```bash
+python -m pip install "kaleprotein[examples]"
 ```
 
 Setuptools packages only `kaleprotein*`. Root-level `examples/`, `tests/`, and
-`docs/` are repository resources and are not installed into site-packages. The
-base package can load externally registered model cards and DTI CSV data without
-importing PyTorch. DrugBAN raw-SMILES processing requires RDKit. The MapDiff
-extra installs PyTorch plus PyTorch Geometric so original processed CATH graph
-objects can be loaded; the refactored model runtime itself uses plain PyTorch.
+`docs/` remain repository resources and are not installed into site-packages.
+Python extras select additional dependencies; they do not change which source
+files are present in a wheel. Clone the repository to run or modify the example
+scripts themselves.
+
+The base package can load externally registered model cards and DTI CSV data
+without importing PyTorch. DrugBAN raw-SMILES processing requires RDKit. The
+MapDiff extra installs PyTorch plus PyTorch Geometric so original processed CATH
+graph objects can be loaded; the refactored model runtime itself uses plain
+PyTorch.
 
 `import kaleprotein` only exposes package metadata and never scans the
 filesystem. Register a model card explicitly before using its named model id:
@@ -334,10 +356,18 @@ Tests use fake URLs, fake RDKit objects, temporary CSVs and graphs, and tiny
 trainable model dimensions. They never download real weights.
 
 ```bash
+git clone https://github.com/pykale/protein.git
+cd protein
+python -m pip install -e ".[dev]"
 python -m pytest -q
 python -m compileall -q kaleprotein
 python -m build
+python -m twine check --strict dist/*
+python scripts/check_distribution.py dist
 ```
+
+See the [release guide](docs/releasing.md) for TestPyPI, version tags, and
+Trusted Publishing setup.
 
 Refactored-source attribution is recorded in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
