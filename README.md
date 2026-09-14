@@ -56,10 +56,6 @@ Choose optional dependencies for your work:
 | `kaleprotein[examples]` | Dependencies for all repository examples |
 | `kaleprotein[dev]` | Example dependencies, testing, lint, build, and release tools |
 
-Quote package names containing extras, for example
-`python -m pip install "kaleprotein[dev]"`, so shells such as zsh do not
-interpret the brackets as filename patterns. The extra is `examples` (plural).
-
 The wheel installs the `kaleprotein` library. Extras add dependencies;
 they do not install the repository's `examples/`, `tests/`, or `docs/`.
 
