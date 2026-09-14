@@ -42,32 +42,22 @@ input/output contracts.
 
 Requires **Python 3.10 or later**.
 
-```bash
-python -m pip install kaleprotein
-```
+Choose the installation that fits your work:
 
-Choose optional dependencies for your work:
-
-| Install | Includes |
+| Installation command | Includes |
 | --- | --- |
-| `kaleprotein` | PyTorch, PyYAML, Auto APIs, reusable model components, and data utilities |
-| `kaleprotein[drugban]` | Base package plus RDKit |
-| `kaleprotein[mapdiff]` | Base package plus PyTorch Geometric |
-| `kaleprotein[examples]` | Dependencies for all repository examples |
-| `kaleprotein[dev]` | Example dependencies, testing, lint, build, and release tools |
+| `python -m pip install "kaleprotein"` | PyTorch, PyYAML, Auto APIs, reusable model components, and data utilities |
+| `python -m pip install "kaleprotein[examples]"` | Base package plus dependencies for all repository examples |
+| `python -m pip install "kaleprotein[dev]"` | Example dependencies, testing, lint, build, and release tools |
 
 The wheel installs the `kaleprotein` library. Extras add dependencies;
 they do not install the repository's `examples/`, `tests/`, or `docs/`.
 
-Download only the example you need, using the installed library:
+After installing the example dependencies, download only the example you need.
+For example:
 
 ```bash
-python -m pip install "kaleprotein[drugban]"
 python -m kaleprotein download-example drugban_dti
-
-# Or get MapDiff and its dependencies.
-python -m pip install "kaleprotein[mapdiff]"
-python -m kaleprotein download-example mapdiff_inverse_folding
 ```
 
 Examples are saved under `./examples/<name>/`. Run the snippets below from
@@ -165,38 +155,38 @@ Here, `model` and `inputs` refer to MapDiff, not the DrugBAN objects above.
 See the [complete MapDiff pipeline](examples/mapdiff_inverse_folding/README.md#pipeline)
 for setup, pretrained weights, and structure-input requirements.
 
-### Build a Model
+### Pipeline Components
 
-Model developers can select reusable encoders and heads independently. For
-example, DrugBAN combines a protein CNN, a molecular GCN, and a bilinear
-attention prediction head:
+Each stage has a defined role and can be reused or replaced independently:
 
-```python
-from kaleprotein.auto import AutoProteinEmbedder, AutoProteinPredictor
+| Stage | Role | Input and output |
+| --- | --- | --- |
+| **Data** (`loaddata`) | Read datasets and normalize records, preserving labels, sample IDs, and provenance. | Files or dataset locations -> records. |
+| **Preprocess** (`prepdata`) | Prepare individual samples for the selected model: tokenize sequences, featurize molecules, or construct structural features. | Records -> prepared samples. |
+| **Collate** (`loaddata`) | Group prepared samples into batches, including padding, masks, and graph-index offsets. Feature construction stays in preprocessing. | Prepared samples -> a named batch mapping. |
+| **Embed** (`model.embed`) | Encode input modalities into learned representations. For generative models, encode the conditioning inputs. | `model.embed(**inputs)` -> named embeddings and accompanying metadata. |
+| **Predict / Generate** (`model.predict`) | Apply a task head or fusion module for prediction, or a generator for tasks such as sequence generation. | `model.predict(**embeddings)` or `model.generate(**embeddings)` -> predictions or generated outputs. |
+| **Evaluate** (`evaluate`) | Compute quantitative metrics from model outputs and any labels or references required by the metric. | Prediction or generation mapping -> metric names and values. |
+| **Interpret** (`interpret`) | Explain model outputs using available information such as attention maps or denoising trajectories. | Output mapping with interpretation fields -> explanations. |
 
-protein_encoder = AutoProteinEmbedder("sequence/cnn")
-molecule_encoder = AutoProteinEmbedder("molecule/gcn")
-interaction_head = AutoProteinPredictor("dti/ban")
-```
+`AutoProteinDataLoader` combines data loading, preprocessing, and collation.
+`AutoProteinModel` combines the embedders and predictor or generator and handles
+checkpoint loading. The model consumes prepared batches; it does not own the
+dataset, preprocessor, or collator.
 
-These are trainable components, not pretrained complete models. A full model
-implements `embed(**inputs)` and `predict(**embeddings)` or
-`generate(**embeddings)`, connecting the components through named mappings.
-Its card declares the component IDs, configuration, and checkpoint metadata.
+Evaluation and interpretation are independent consumers of model outputs.
+Use `model.evaluate(**outputs)` or a configured `AutoProteinEvaluator` for
+metrics, and `AutoProteinInterpreter` for optional explanations. Interpretation
+does not require running evaluation first.
 
-Register a complete model card to make your implementation available through
-the same Auto API:
+Auto APIs select and construct registered components from configuration.
+The dictionary keys passed through `**inputs`, `**embeddings`, and `**outputs`
+define the interfaces between stages, allowing developers to choose their own
+fields and replace compatible components. Shared utilities provide supporting
+operations such as file parsing and checkpoint handling.
 
-```python
-from kaleprotein.auto import AutoProteinModel
-from kaleprotein.auto.registry import register_model_card
-
-register_model_card("path/to/my_model/config.yaml")
-model = AutoProteinModel("MyTask/MyModel")
-```
-
-Follow the [extension guide](CUSTOMIZE.md) to implement components, define
-a model card, register it, and test the resulting workflow.
+See the [extension guide](CUSTOMIZE.md) for implementing and registering
+custom pipeline components and model cards.
 
 ## Models and Datasets
 
