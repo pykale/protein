@@ -30,7 +30,7 @@ Data preparation, embedding, prediction or generation, evaluation, and
 interpretation remain explicit steps. Named dictionaries connect them, so
 researchers can inspect intermediate results and replace individual components.
 
-![KaleProtein pipeline: AutoProteinDataLoader loads, preprocesses, and collates data; AutoProteinModel embeds and predicts or generates; outputs branch independently into evaluation and optional interpretation. Auto, registry, config, and utils provide shared support.](docs/assets/kaleprotein-pipeline.png)
+![KaleProtein modules: AutoProteinDataLoader combines loaddata and prepdata; AutoProteinModel combines embed and predict; outputs branch independently into evaluate and optional interpret. Shared support comes from auto/registry, auto/config, and utils.](docs/assets/kaleprotein-pipeline.png)
 
 The data loader owns data preparation and batching. The model owns its
 embedders, predictor or generator, and model weights. Auto APIs select and
@@ -161,19 +161,20 @@ for setup, pretrained weights, and structure-input requirements.
 
 ### Pipeline Components
 
-Each stage has a defined role and can be reused or replaced independently:
+Each module has a defined role and provides reusable pipeline components.
+The `embed` and `predict` modules live under `kaleprotein.model`:
 
-| Stage | Role | Input and output |
+| Module | Role | Input and output |
 | --- | --- | --- |
-| **Data** (`loaddata`) | Read datasets and normalize records, preserving labels, sample IDs, and provenance. | Files or dataset locations -> records. |
-| **Preprocess** (`prepdata`) | Prepare individual samples for the selected model: tokenize sequences, featurize molecules, or construct structural features. | Records -> prepared samples. |
-| **Collate** (`loaddata`) | Group prepared samples into batches, including padding, masks, and graph-index offsets. Feature construction stays in preprocessing. | Prepared samples -> a named batch mapping. |
-| **Embed** (`model.embed`) | Encode input modalities into learned representations. For generative models, encode the conditioning inputs. | `model.embed(**inputs)` -> named embeddings and accompanying metadata. |
-| **Predict / Generate** (`model.predict`) | Apply a task head or fusion module for prediction, or a generator for tasks such as sequence generation. | `model.predict(**embeddings)` or `model.generate(**embeddings)` -> predictions or generated outputs. |
-| **Evaluate** (`evaluate`) | Compute quantitative metrics from model outputs and any labels or references required by the metric. | Prediction or generation mapping -> metric names and values. |
-| **Interpret** (`interpret`) | Explain model outputs using available information such as attention maps or denoising trajectories. | Output mapping with interpretation fields -> explanations. |
+| `loaddata` | Read datasets and normalize records, preserving labels, sample IDs, and provenance. Its collators batch prepared samples with padding, masks, and graph-index offsets. | Files or dataset locations -> records; prepared samples -> named batch mappings. |
+| `prepdata` | Prepare individual samples for the selected model: tokenize sequences, featurize molecules, or construct structural features. | Records -> prepared samples. |
+| `embed` | Encode input modalities into learned representations. For generative models, encode the conditioning inputs. | `model.embed(**inputs)` -> named embeddings and accompanying metadata. |
+| `predict` | Apply a task head or fusion module for prediction, or a generator for tasks such as sequence generation. | `model.predict(**embeddings)` or `model.generate(**embeddings)` -> predictions or generated outputs. |
+| `evaluate` | Compute quantitative metrics from model outputs and any labels or references required by the metric. | Prediction or generation mapping -> metric names and values. |
+| `interpret` | Explain model outputs using available information such as attention maps or denoising trajectories. | Output mapping with interpretation fields -> explanations. |
 
-`AutoProteinDataLoader` combines data loading, preprocessing, and collation.
+`AutoProteinDataLoader` combines `loaddata` and `prepdata`: records are loaded,
+preprocessed, and then collated into batches.
 `AutoProteinModel` combines the embedders and predictor or generator and handles
 checkpoint loading. The model consumes prepared batches; it does not own the
 dataset, preprocessor, or collator.
