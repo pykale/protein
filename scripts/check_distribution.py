@@ -8,7 +8,7 @@ from email.parser import BytesParser
 from pathlib import Path
 from zipfile import ZipFile
 
-EXPECTED_EXTRAS = {"dev", "drugban", "examples", "mapdiff", "test"}
+EXPECTED_EXTRAS = {"dev", "drugban-dti", "mapdiff-inverse-folding", "test"}
 FORBIDDEN_PARTS = {".DS_Store", "__pycache__"}
 
 

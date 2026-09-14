@@ -47,16 +47,20 @@ Choose the installation that fits your work:
 | Installation command | Includes |
 | --- | --- |
 | `python -m pip install "kaleprotein"` | PyTorch, PyYAML, Auto APIs, reusable model components, and data utilities |
-| `python -m pip install "kaleprotein[examples]"` | Base package plus dependencies for all repository examples |
-| `python -m pip install "kaleprotein[dev]"` | Example dependencies, testing, lint, build, and release tools |
+| `python -m pip install "kaleprotein[example-name]"` | Base package plus dependencies for the selected example |
+| `python -m pip install "kaleprotein[dev]"` | Base package plus testing, lint, build, and release tools |
+
+Replace `example-name` with an example name from the [model index](#model-index).
+Use the same name when installing its dependencies and downloading its code.
+The `dev` extra does not install example-specific dependencies.
 
 The wheel installs the `kaleprotein` library. Extras add dependencies;
 they do not install the repository's `examples/`, `tests/`, or `docs/`.
 
-After installing the example dependencies, download only the example you need.
-For example:
+Install the selected example's dependencies, then download its code. For example:
 
 ```bash
+python -m pip install "kaleprotein[drugban_dti]"
 python -m kaleprotein download-example drugban_dti
 ```
 
@@ -196,10 +200,10 @@ Complete model implementations live in the repository examples. Both are
 self-contained PyTorch refactors and do not import an upstream checkout at
 runtime.
 
-| Model ID | Task | Inputs | Pretrained weights | Card and workflows |
-| --- | --- | --- | --- | --- |
-| `DTI/DrugBAN` | Drug-target interaction prediction | Protein sequence and molecular SMILES | Supply a checkpoint or train locally; no default download URL | [DrugBAN](examples/drugban_dti/README.md) / [Config](examples/drugban_dti/config.yaml) |
-| `InverseFolding/MapDiff` | Protein inverse folding | Protein structure or processed residue graph | Configured upstream v1.0.1 release download | [MapDiff](examples/mapdiff_inverse_folding/README.md) / [Config](examples/mapdiff_inverse_folding/config.yaml) |
+| Model ID | Example name | Task | Inputs | Pretrained weights | Card and workflows |
+| --- | --- | --- | --- | --- | --- |
+| `DTI/DrugBAN` | `drugban_dti` | Drug-target interaction prediction | Protein sequence and molecular SMILES | Supply a checkpoint or train locally; no default download URL | [DrugBAN](examples/drugban_dti/README.md) / [Config](examples/drugban_dti/config.yaml) |
+| `InverseFolding/MapDiff` | `mapdiff_inverse_folding` | Protein inverse folding | Protein structure or processed residue graph | Configured upstream v1.0.1 release download | [MapDiff](examples/mapdiff_inverse_folding/README.md) / [Config](examples/mapdiff_inverse_folding/config.yaml) |
 
 `AutoProteinModel(..., pretrain=True)` checks the card's local weight path,
 downloads from its configured URL when needed, and verifies a checksum when
@@ -283,6 +287,9 @@ cd protein
 python -m pip install -e ".[dev]"
 python -m pytest -q
 ```
+
+Install the extra for any example you are developing separately, using its
+name from the model index.
 
 Tests use temporary data, mocked download clients, and small model inputs;
 they do not download real pretrained checkpoints.

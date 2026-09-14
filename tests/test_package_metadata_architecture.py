@@ -69,9 +69,9 @@ def test_pyproject_packages_only_kaleprotein():
     text = pyproject.read_text(encoding="utf-8")
 
     assert '[project.optional-dependencies]' in text
-    assert "drugban = [" in text
-    assert "mapdiff = [" in text
-    assert "examples = [" in text
+    assert "drugban_dti = [" in text
+    assert "mapdiff_inverse_folding = [" in text
+    assert "\nexamples = [" not in text
     assert "test = [" in text
     assert "dev = [" in text
     assert '"**/*.yaml"' in text
