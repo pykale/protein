@@ -29,6 +29,8 @@ def test_public_install_extras_have_expected_relationships():
 def test_pypi_metadata_is_release_ready():
     project = _project_config()
 
+    assert "torch>=2.0" in project["dependencies"]
+    assert "PyYAML>=6.0" in project["dependencies"]
     assert project["name"] == "kaleprotein"
     assert project["license"] == "MIT"
     assert set(project["license-files"]) == {"LICENSE", "THIRD_PARTY_NOTICES.md"}

@@ -62,6 +62,10 @@ def check_wheel(wheel: Path, expected_version: str) -> None:
     if extras != EXPECTED_EXTRAS:
         raise AssertionError(f"Unexpected extras: {sorted(extras)}.")
 
+    requirements = set(metadata.get_all("Requires-Dist", []))
+    if "torch>=2.0" not in requirements:
+        raise AssertionError("Wheel must require torch>=2.0 without an extra marker.")
+
     if not any(name.startswith("kaleprotein/") for name in names):
         raise AssertionError("Wheel does not contain the kaleprotein package.")
     for prefix in ("examples/", "tests/", "docs/", "scripts/"):

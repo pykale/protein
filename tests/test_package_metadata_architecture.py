@@ -142,6 +142,7 @@ def test_repository_uses_flat_verb_oriented_package_layers():
         "loaddata_require_file.py",
         "loaddata_safe_path_part.py",
         "model_load_checkpoint_state_dict.py",
+        "model_download_example.py",
         "model_move_to_device.py",
         "model_verify_checksum.py",
         "prepdata_build_residue_graph.py",

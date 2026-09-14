@@ -4,6 +4,7 @@ from importlib import import_module
 
 
 _IMPORT_STRUCTURE = {
+    "download_example": (".model_download_example", "download_example"),
     "MetricUndefinedError": (
         ".evaluate_extract_binary_inputs",
         "MetricUndefinedError",

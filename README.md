@@ -50,22 +50,41 @@ Choose optional dependencies for your work:
 
 | Install | Includes |
 | --- | --- |
-| `kaleprotein` | Auto APIs, dataset adapters, configuration, and lightweight utilities |
-| `kaleprotein[drugban]` | Base package plus PyTorch and RDKit |
-| `kaleprotein[mapdiff]` | Base package plus PyTorch and PyTorch Geometric |
+| `kaleprotein` | PyTorch, PyYAML, Auto APIs, reusable model components, and data utilities |
+| `kaleprotein[drugban]` | Base package plus RDKit |
+| `kaleprotein[mapdiff]` | Base package plus PyTorch Geometric |
 | `kaleprotein[examples]` | Dependencies for all repository examples |
 | `kaleprotein[dev]` | Example dependencies, testing, lint, build, and release tools |
+
+Quote package names containing extras, for example
+`python -m pip install "kaleprotein[dev]"`, so shells such as zsh do not
+interpret the brackets as filename patterns. The extra is `examples` (plural).
 
 The wheel installs the `kaleprotein` library. Extras add dependencies;
 they do not install the repository's `examples/`, `tests/`, or `docs/`.
 
-To follow the model examples below, clone the repository and run from its root:
+Download only the example you need, using the installed library:
 
 ```bash
-git clone https://github.com/pykale/protein.git
-cd protein
-python -m pip install -e ".[examples]"
+python -m pip install "kaleprotein[drugban]"
+python -m kaleprotein download-example drugban_dti
+
+# Or get MapDiff and its dependencies.
+python -m pip install "kaleprotein[mapdiff]"
+python -m kaleprotein download-example mapdiff_inverse_folding
 ```
+
+Examples are saved under `./examples/<name>/`. Run the snippets below from
+the directory containing `examples/`; no library checkout or editable install
+is needed. The downloader fetches code, configuration, maps, and license
+notices, without importing the downloaded code. It leaves existing example
+directories untouched.
+
+By default, examples come from the installed library's `v<version>` release
+tag. Use `--ref <tag-or-commit>` to select a revision, or `--ref main` when
+working with development code. `--output <directory>` changes the parent
+download directory. The selected commit is recorded in
+`.kaleprotein-example.json` inside each downloaded example.
 
 Datasets and large checkpoints are obtained separately. The
 [model and dataset index](#models-and-datasets) links to each workflow's
@@ -273,6 +292,8 @@ implementation conventions and open a pull request against this repository.
 For local development:
 
 ```bash
+git clone https://github.com/pykale/protein.git
+cd protein
 python -m pip install -e ".[dev]"
 python -m pytest -q
 ```

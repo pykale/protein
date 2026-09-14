@@ -38,6 +38,17 @@ duplicated. Reusable sparse EGNN and invariant point attention layers live in
 
 ## Pipeline
 
+Install the dependencies and download this example without cloning the library:
+
+```bash
+python -m pip install "kaleprotein[mapdiff]"
+python -m kaleprotein download-example mapdiff_inverse_folding
+```
+
+Run the following snippets and workflow commands from the directory containing
+the downloaded `examples/` folder. Data and large pretrained weights are
+obtained separately; `pretrain=True` resolves the configured checkpoint.
+
 ```python
 from kaleprotein.auto import (
     AutoProteinConfig,

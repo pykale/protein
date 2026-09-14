@@ -14,10 +14,17 @@ python -m pip install "kaleprotein[examples]"
 python -m pip install "kaleprotein[dev]"
 ```
 
-`examples` is the union of the DrugBAN and MapDiff runtime dependencies. `dev`
+The base package requires PyTorch and PyYAML. `drugban` adds RDKit, and
+`mapdiff` adds PyTorch Geometric; all extras inherit the base dependencies.
+`examples` is the union of the DrugBAN and MapDiff extra dependencies. `dev`
 is a superset of `examples` and `test`, adding build, lint, and publishing
 tools. Packaging extras add dependencies; they cannot conditionally add files
 to one wheel.
+
+`python -m kaleprotein download-example <name>` fetches only that example's
+source and small assets from the installed version's release tag. Keep the
+tagged examples compatible with the wheel published for that tag. The command
+does not install extras or download datasets and pretrained weights.
 
 ## One-Time Trusted Publishing Setup
 
