@@ -8,7 +8,7 @@ from email.parser import BytesParser
 from pathlib import Path
 from zipfile import ZipFile
 
-EXPECTED_EXTRAS = {"dev", "drugban", "examples", "mapdiff", "test"}
+EXPECTED_EXTRAS = {"dev", "drugban-dti", "mapdiff-inverse-folding", "test"}
 FORBIDDEN_PARTS = {".DS_Store", "__pycache__"}
 
 
@@ -61,6 +61,10 @@ def check_wheel(wheel: Path, expected_version: str) -> None:
     extras = set(metadata.get_all("Provides-Extra", []))
     if extras != EXPECTED_EXTRAS:
         raise AssertionError(f"Unexpected extras: {sorted(extras)}.")
+
+    requirements = set(metadata.get_all("Requires-Dist", []))
+    if "torch>=2.0" not in requirements:
+        raise AssertionError("Wheel must require torch>=2.0 without an extra marker.")
 
     if not any(name.startswith("kaleprotein/") for name in names):
         raise AssertionError("Wheel does not contain the kaleprotein package.")

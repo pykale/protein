@@ -109,8 +109,12 @@ Use `split` and `subset` for layouts such as `random/train.csv` or
 
 ## Workflows
 
+With KaleProtein installed, download this example independently of the library
+source. Run the workflow commands from the directory containing `examples/`:
+
 ```bash
-python -m pip install -e ".[drugban]"
+python -m pip install "kaleprotein[drugban_dti]"
+python -m kaleprotein download-example drugban_dti
 
 python -m examples.drugban_dti.train \
   --dataset BindingDB --root /data/drugban --split random --subset train \

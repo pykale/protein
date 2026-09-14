@@ -17,18 +17,25 @@ def _project_config():
 def test_public_install_extras_have_expected_relationships():
     optional = _project_config()["optional-dependencies"]
 
-    example_dependencies = set(optional["drugban"]) | set(optional["mapdiff"])
+    assert set(optional) == {"drugban_dti", "mapdiff_inverse_folding", "test", "dev"}
+    assert optional["drugban_dti"] == ["rdkit>=2022.9"]
+    assert optional["mapdiff_inverse_folding"] == ["torch-geometric>=2.4"]
+    example_dependencies = set(optional["drugban_dti"]) | set(optional["mapdiff_inverse_folding"])
     test_dependencies = set(optional["test"])
     dev_dependencies = set(optional["dev"])
 
-    assert set(optional["examples"]) == example_dependencies
-    assert dev_dependencies >= example_dependencies | test_dependencies
+    assert dev_dependencies >= test_dependencies
+    assert dev_dependencies.isdisjoint(example_dependencies)
     assert {"build>=1.2", "ruff>=0.9", "twine>=6.0"} <= dev_dependencies
+    for name in ("drugban_dti", "mapdiff_inverse_folding"):
+        assert (ROOT / "examples" / name / "config.yaml").is_file()
 
 
 def test_pypi_metadata_is_release_ready():
     project = _project_config()
 
+    assert "torch>=2.0" in project["dependencies"]
+    assert "PyYAML>=6.0" in project["dependencies"]
     assert project["name"] == "kaleprotein"
     assert project["license"] == "MIT"
     assert set(project["license-files"]) == {"LICENSE", "THIRD_PARTY_NOTICES.md"}

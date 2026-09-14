@@ -10,14 +10,21 @@ The public installation contracts are:
 
 ```bash
 python -m pip install kaleprotein
-python -m pip install "kaleprotein[examples]"
+python -m pip install "kaleprotein[example-name]"
 python -m pip install "kaleprotein[dev]"
 ```
 
-`examples` is the union of the DrugBAN and MapDiff runtime dependencies. `dev`
-is a superset of `examples` and `test`, adding build, lint, and publishing
-tools. Packaging extras add dependencies; they cannot conditionally add files
-to one wheel.
+Replace `example-name` with the selected example's folder name. The base
+package requires PyTorch and PyYAML. `drugban_dti` adds RDKit, and
+`mapdiff_inverse_folding` adds PyTorch Geometric. There is no aggregate
+`examples` extra. `dev` contains test, build, lint, and publishing tools only;
+example dependencies are selected separately. All extras inherit the base
+dependencies. Packaging extras add dependencies, not example source files.
+
+`python -m kaleprotein download-example <name>` fetches only that example's
+source and small assets from the installed version's release tag. Keep the
+tagged examples compatible with the wheel published for that tag. The command
+does not install extras or download datasets and pretrained weights.
 
 ## One-Time Trusted Publishing Setup
 
@@ -44,6 +51,8 @@ Start from a clean checkout and install all development dependencies:
 
 ```bash
 python -m pip install -e ".[dev]"
+python -m pip install -e ".[drugban_dti]"
+python -m pip install -e ".[mapdiff_inverse_folding]"
 python -m pytest -q
 python -m compileall -q kaleprotein
 python -m build
@@ -63,12 +72,13 @@ VERSION=$(cat kaleprotein/_version.txt)
 python -m pip install \
   --index-url https://test.pypi.org/simple/ \
   --extra-index-url https://pypi.org/simple/ \
-  "kaleprotein[examples]==${VERSION}"
+  "kaleprotein==${VERSION}"
 python -c "import kaleprotein; print(kaleprotein.__version__)"
 ```
 
 The extra index is required because scientific dependencies are normally
-resolved from production PyPI rather than duplicated on TestPyPI.
+resolved from production PyPI rather than duplicated on TestPyPI. Repeat with
+each example extra separately to verify its dependency set.
 
 ## Publish To PyPI
 
